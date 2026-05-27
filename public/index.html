@@ -218,6 +218,35 @@
     font-size:11px;color:var(--text);background:rgba(255,255,255,0.07);
     border:1px solid var(--glass-line);border-radius:999px;
     padding:6px 11px;white-space:nowrap;font-weight:500;
+    cursor:pointer;font-family:inherit;transition:.14s;
+    display:inline-flex;align-items:center;gap:5px;
+  }
+  .lang-pill::after{content:"▾";font-size:9px;opacity:.7;}
+  .lang-pill:active{background:rgba(255,255,255,0.14);transform:scale(.96);}
+  .opt{color:var(--text-dim);font-weight:400;font-size:9px;
+    letter-spacing:.06em;text-transform:none;margin-left:6px;}
+
+  /* ---------- modal sheet (language switch) ---------- */
+  .sheet{
+    position:fixed;inset:0;z-index:80;display:flex;
+    align-items:flex-end;justify-content:center;
+    background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);
+    animation:fadeIn .2s ease;
+  }
+  .sheet[hidden]{display:none;}
+  @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+  .sheet-card{
+    width:100%;max-width:480px;background:#15101f;
+    border:1px solid var(--glass-line);
+    border-radius:22px 22px 0 0;padding:20px 20px 28px;
+    box-shadow:0 -20px 50px rgba(0,0,0,0.7);
+    animation:slideUp .26s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes slideUp{from{transform:translateY(40px);opacity:0;}to{transform:none;opacity:1;}}
+  .sheet-head{
+    display:flex;align-items:center;justify-content:space-between;
+    font-family:'Clash Display','Space Grotesk',sans-serif;
+    font-size:17px;font-weight:600;margin-bottom:12px;
   }
 
   .messages{
@@ -327,6 +356,9 @@
     <select id="langSelect"></select>
     <p class="pickernote">Newer languages are still rough — translation may not be accurate.</p>
 
+    <label for="countrySelect">Show your country <span class="opt">(optional)</span></label>
+    <select id="countrySelect"></select>
+
     <label for="codeInput">Room code</label>
     <input id="codeInput" placeholder="Type a code to join, or leave blank" maxlength="12" autocomplete="off" style="text-transform:uppercase">
 
@@ -355,7 +387,7 @@
       <div class="code irid" id="roomCodeLabel">——</div>
       <div class="presence waiting" id="presence">connecting…</div>
     </div>
-    <span class="lang-pill" id="myLangPill">—</span>
+    <button class="lang-pill" id="myLangPill" type="button" aria-label="Switch language">—</button>
     <button class="icon-btn" id="shareBtn" aria-label="Share code">&#8682;</button>
   </div>
 
@@ -432,6 +464,20 @@
   };
 })();
 </script>
+
+<!-- language-switch sheet -->
+<div class="sheet" id="langSheet" hidden>
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <span>Switch language</span>
+      <button class="icon-btn" id="sheetClose" aria-label="Close">&times;</button>
+    </div>
+    <p class="pickernote" style="margin-bottom:10px">Future messages will be
+      shown to you in the new language. Past messages stay as they were.</p>
+    <select id="langSwitchSelect"></select>
+    <button class="btn" id="langSwitchApply" style="margin-top:14px">Switch</button>
+  </div>
+</div>
 
 <!-- config: paste Firebase keys here later -->
 <script src="config.js"></script>

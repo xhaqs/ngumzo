@@ -46,7 +46,35 @@ const LANGS = [
   { code:"om",  name:"Afaan Oromoo", tier:"rough" }
 ];
 
-/* ---------- tiny DOM helpers ---------- */
+/* ---------- countries offered (optional flag next to user's name) ----------
+   Voluntary. Never auto-detected. Users who skip it stay flag-less.
+   Tight starter list — East Africa + common diaspora destinations. */
+const COUNTRIES = [
+  { code:"",   name:"— don't show —",        flag:""   },
+  { code:"ke", name:"Kenya",                  flag:"🇰🇪" },
+  { code:"tz", name:"Tanzania",               flag:"🇹🇿" },
+  { code:"ug", name:"Uganda",                 flag:"🇺🇬" },
+  { code:"rw", name:"Rwanda",                 flag:"🇷🇼" },
+  { code:"et", name:"Ethiopia",               flag:"🇪🇹" },
+  { code:"so", name:"Somalia",                flag:"🇸🇴" },
+  { code:"za", name:"South Africa",           flag:"🇿🇦" },
+  { code:"ng", name:"Nigeria",                flag:"🇳🇬" },
+  { code:"gb", name:"United Kingdom",         flag:"🇬🇧" },
+  { code:"us", name:"United States",          flag:"🇺🇸" },
+  { code:"ae", name:"United Arab Emirates",   flag:"🇦🇪" },
+  { code:"sa", name:"Saudi Arabia",           flag:"🇸🇦" },
+  { code:"qa", name:"Qatar",                  flag:"🇶🇦" },
+  { code:"de", name:"Germany",                flag:"🇩🇪" },
+  { code:"ca", name:"Canada",                 flag:"🇨🇦" },
+  { code:"au", name:"Australia",              flag:"🇦🇺" },
+  { code:"in", name:"India",                  flag:"🇮🇳" },
+  { code:"cn", name:"China",                  flag:"🇨🇳" },
+  { code:"fr", name:"France",                 flag:"🇫🇷" }
+];
+function flagFor(code){
+  const c = COUNTRIES.find(x=>x.code===code);
+  return c && c.flag ? c.flag : "";
+}
 const $ = id => document.getElementById(id);
 function toast(msg){
   const t=document.createElement('div');
@@ -64,7 +92,7 @@ function show(screenId){
 }
 
 /* ---------- state ---------- */
-let me = { name:"", lang:"en" };
+let me = { name:"", lang:"en", country:"" };
 let room = { code:"", key:null };
 let db = null;
 let demoMode = false;
@@ -135,8 +163,8 @@ async function translate(text, from, to){
 /* ============================================================
    JOIN SCREEN
    ============================================================ */
-function fillLangs(){
-  const sel = $('langSelect');
+function populateLangSelect(sel){
+  sel.innerHTML = "";
   const groups = [
     { tier:"strong", label:"Well supported" },
     { tier:"fair",   label:"Regional — usable" },
@@ -153,9 +181,22 @@ function fillLangs(){
     });
     sel.appendChild(og);
   });
-  // best guess from the phone's language
+}
+function fillLangs(){
+  populateLangSelect($('langSelect'));
+  populateLangSelect($('langSwitchSelect'));
+  // best guess from the phone's language for the join screen
   const guess = (navigator.language||"en").slice(0,2);
-  if(LANGS.some(l=>l.code===guess)) sel.value=guess;
+  if(LANGS.some(l=>l.code===guess)) $('langSelect').value=guess;
+}
+function fillCountries(){
+  const sel = $('countrySelect');
+  COUNTRIES.forEach(c=>{
+    const o = document.createElement('option');
+    o.value = c.code;
+    o.textContent = c.flag ? (c.flag + "  " + c.name) : c.name;
+    sel.appendChild(o);
+  });
 }
 function randomCode(){
   // human-friendly: no easily-confused chars (0/O, 1/I)
@@ -184,6 +225,7 @@ async function enterRoom(){
 
   me.name = name;
   me.lang = $('langSelect').value;
+  me.country = $('countrySelect').value || "";
   room.code = code;
   room.key  = await deriveKey(code);
 
@@ -212,7 +254,7 @@ async function enterRoom(){
   }
 
   $('roomCodeLabel').textContent = code;
-  $('myLangPill').textContent = LANGS.find(l=>l.code===me.lang).name;
+  updateLangPill();
   $('messages').innerHTML = "";
   seen.clear();
 
@@ -309,12 +351,13 @@ async function sendMessage(){
   const payload = {
     name: me.name,
     lang: me.lang,
+    country: me.country || "",
     text: text,
     ts:   Date.now()
   };
 
   // show my own message immediately (no translation — it's my language)
-  renderBubble({ mine:true, name:me.name, original:text,
+  renderBubble({ mine:true, name:me.name, country:me.country, original:text,
                  shown:text, fromLang:me.lang, ts:payload.ts });
 
   if(demoMode) return;   // nothing to send to
@@ -340,7 +383,7 @@ async function renderIncoming(id, raw){
   // translate THEIR message into MY language
   const shown = await translate(payload.text, payload.lang, me.lang);
   renderBubble({
-    mine:false, name:payload.name,
+    mine:false, name:payload.name, country:payload.country||"",
     original:payload.text, shown:shown,
     fromLang:payload.lang, ts:payload.ts
   });
@@ -349,19 +392,21 @@ async function renderIncoming(id, raw){
 /* ============================================================
    RENDERING
    ============================================================ */
-function renderBubble({mine,name,original,shown,fromLang,ts}){
+function renderBubble({mine,name,country,original,shown,fromLang,ts}){
   const box = $('messages');
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + (mine?'mine':'theirs');
 
   const showOriginal = (!mine && original !== shown);
   const time = new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  const flag = flagFor(country);
+  const nameLine = (flag ? flag + " " : "") + escapeHtml(name);
 
   wrap.innerHTML =
     `<div class="bubble">${escapeHtml(shown)}</div>` +
     (showOriginal
       ? `<div class="original">“${escapeHtml(original)}”</div>` : ``) +
-    `<div class="meta">${escapeHtml(name)} · ${time}</div>`;
+    `<div class="meta">${nameLine} · ${time}</div>`;
 
   box.appendChild(wrap);
   box.scrollTop = box.scrollHeight;
@@ -401,9 +446,44 @@ $('backBtn').addEventListener('click', ()=>{
 });
 
 /* ============================================================
+   LANGUAGE SWITCHER (in-chat)
+   - Past bubbles stay as they were.
+   - A system line marks the switch.
+   - Future incoming messages translate to the new language.
+   ============================================================ */
+function updateLangPill(){
+  const langName = LANGS.find(l=>l.code===me.lang).name;
+  const flag = flagFor(me.country);
+  $('myLangPill').textContent = (flag ? flag + " " : "") + langName;
+}
+function openLangSheet(){
+  $('langSwitchSelect').value = me.lang;
+  $('langSheet').hidden = false;
+}
+function closeLangSheet(){ $('langSheet').hidden = true; }
+
+$('myLangPill').addEventListener('click', openLangSheet);
+$('sheetClose').addEventListener('click', closeLangSheet);
+$('langSheet').addEventListener('click', e=>{
+  // tap on the dim backdrop (not the card) closes it
+  if(e.target === $('langSheet')) closeLangSheet();
+});
+$('langSwitchApply').addEventListener('click', ()=>{
+  const newLang = $('langSwitchSelect').value;
+  if(newLang === me.lang){ closeLangSheet(); return; }
+  const oldName = LANGS.find(l=>l.code===me.lang).name;
+  const newName = LANGS.find(l=>l.code===newLang).name;
+  me.lang = newLang;
+  updateLangPill();
+  addSystemLine("You switched from " + oldName + " to " + newName + ". Future messages will reach you in " + newName + ".");
+  closeLangSheet();
+});
+
+/* ============================================================
    BOOT
    ============================================================ */
 fillLangs();
+fillCountries();
 // allow ?room=CODE links to prefill
 const urlRoom = new URLSearchParams(location.search).get('room');
 if(urlRoom) $('codeInput').value = urlRoom.toUpperCase();
