@@ -20,89 +20,99 @@ import { getDatabase, ref, push, onChildAdded, query, limitToLast,
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 /* ---------- languages offered ----------
+   Each entry has an English name (so any user can scan the picker) and
+   a native script (so a native speaker also recognises their language).
+   The picker shows "English · Native" — best of both for a mixed-audience
+   onboarding flow.
+
    tier "strong"  = reliable machine translation (Google's well-supported set)
    tier "fair"    = usable, less polished
-   tier "rough"   = newer / low-resource — translation may be off.
-   The picker shows them grouped so a user chooses with eyes open. */
+   tier "rough"   = newer / low-resource — translation may be off. */
 const LANGS = [
   // --- strong (large training data, high quality) ---
-  { code:"sw",  name:"Kiswahili",       tier:"strong" },
-  { code:"en",  name:"English",         tier:"strong" },
-  { code:"fr",  name:"Français",        tier:"strong" },
-  { code:"ar",  name:"العربية",          tier:"strong" },
-  { code:"es",  name:"Español",         tier:"strong" },
-  { code:"pt",  name:"Português",       tier:"strong" },
-  { code:"de",  name:"Deutsch",         tier:"strong" },
-  { code:"it",  name:"Italiano",        tier:"strong" },
-  { code:"nl",  name:"Nederlands",      tier:"strong" },
-  { code:"ru",  name:"Русский",         tier:"strong" },
-  { code:"pl",  name:"Polski",          tier:"strong" },
-  { code:"tr",  name:"Türkçe",          tier:"strong" },
-  { code:"zh-CN", name:"中文 (简体)",      tier:"strong" },
-  { code:"zh-TW", name:"中文 (繁體)",      tier:"strong" },
-  { code:"ja",  name:"日本語",            tier:"strong" },
-  { code:"ko",  name:"한국어",            tier:"strong" },
-  { code:"hi",  name:"हिन्दी",            tier:"strong" },
-  { code:"bn",  name:"বাংলা",            tier:"strong" },
-  { code:"ur",  name:"اردو",            tier:"strong" },
-  { code:"id",  name:"Bahasa Indonesia", tier:"strong" },
-  { code:"vi",  name:"Tiếng Việt",      tier:"strong" },
-  { code:"th",  name:"ไทย",              tier:"strong" },
-  { code:"el",  name:"Ελληνικά",        tier:"strong" },
-  { code:"he",  name:"עברית",            tier:"strong" },
-  { code:"fa",  name:"فارسی",            tier:"strong" },
-  { code:"sv",  name:"Svenska",         tier:"strong" },
-  { code:"no",  name:"Norsk",           tier:"strong" },
-  { code:"da",  name:"Dansk",           tier:"strong" },
-  { code:"fi",  name:"Suomi",           tier:"strong" },
-  { code:"cs",  name:"Čeština",         tier:"strong" },
-  { code:"hu",  name:"Magyar",          tier:"strong" },
-  { code:"ro",  name:"Română",          tier:"strong" },
-  { code:"uk",  name:"Українська",      tier:"strong" },
-  { code:"ms",  name:"Bahasa Melayu",   tier:"strong" },
-  { code:"tl",  name:"Tagalog",         tier:"strong" },
+  { code:"en",    english:"English",                native:"",              tier:"strong" },
+  { code:"sw",    english:"Swahili",                native:"Kiswahili",     tier:"strong" },
+  { code:"fr",    english:"French",                 native:"Français",      tier:"strong" },
+  { code:"ar",    english:"Arabic",                 native:"العربية",        tier:"strong" },
+  { code:"es",    english:"Spanish",                native:"Español",       tier:"strong" },
+  { code:"pt",    english:"Portuguese",             native:"Português",     tier:"strong" },
+  { code:"de",    english:"German",                 native:"Deutsch",       tier:"strong" },
+  { code:"it",    english:"Italian",                native:"Italiano",      tier:"strong" },
+  { code:"nl",    english:"Dutch",                  native:"Nederlands",    tier:"strong" },
+  { code:"ru",    english:"Russian",                native:"Русский",       tier:"strong" },
+  { code:"pl",    english:"Polish",                 native:"Polski",        tier:"strong" },
+  { code:"tr",    english:"Turkish",                native:"Türkçe",        tier:"strong" },
+  { code:"zh-CN", english:"Chinese (Simplified)",   native:"中文 (简体)",     tier:"strong" },
+  { code:"zh-TW", english:"Chinese (Traditional)",  native:"中文 (繁體)",     tier:"strong" },
+  { code:"ja",    english:"Japanese",               native:"日本語",          tier:"strong" },
+  { code:"ko",    english:"Korean",                 native:"한국어",          tier:"strong" },
+  { code:"hi",    english:"Hindi",                  native:"हिन्दी",          tier:"strong" },
+  { code:"bn",    english:"Bengali",                native:"বাংলা",          tier:"strong" },
+  { code:"ur",    english:"Urdu",                   native:"اردو",          tier:"strong" },
+  { code:"id",    english:"Indonesian",             native:"Bahasa Indonesia", tier:"strong" },
+  { code:"vi",    english:"Vietnamese",             native:"Tiếng Việt",    tier:"strong" },
+  { code:"th",    english:"Thai",                   native:"ไทย",           tier:"strong" },
+  { code:"el",    english:"Greek",                  native:"Ελληνικά",      tier:"strong" },
+  { code:"he",    english:"Hebrew",                 native:"עברית",         tier:"strong" },
+  { code:"fa",    english:"Persian",                native:"فارسی",         tier:"strong" },
+  { code:"sv",    english:"Swedish",                native:"Svenska",       tier:"strong" },
+  { code:"no",    english:"Norwegian",              native:"Norsk",         tier:"strong" },
+  { code:"da",    english:"Danish",                 native:"Dansk",         tier:"strong" },
+  { code:"fi",    english:"Finnish",                native:"Suomi",         tier:"strong" },
+  { code:"cs",    english:"Czech",                  native:"Čeština",       tier:"strong" },
+  { code:"hu",    english:"Hungarian",              native:"Magyar",        tier:"strong" },
+  { code:"ro",    english:"Romanian",               native:"Română",        tier:"strong" },
+  { code:"uk",    english:"Ukrainian",              native:"Українська",    tier:"strong" },
+  { code:"ms",    english:"Malay",                  native:"Bahasa Melayu", tier:"strong" },
+  { code:"tl",    english:"Tagalog (Filipino)",     native:"",              tier:"strong" },
 
   // --- fair (usable, less polished) ---
-  { code:"so",  name:"Soomaali",        tier:"fair" },
-  { code:"am",  name:"አማርኛ (Amharic)",   tier:"fair" },
-  { code:"rw",  name:"Kinyarwanda",     tier:"fair" },
-  { code:"zu",  name:"isiZulu",         tier:"fair" },
-  { code:"xh",  name:"isiXhosa",        tier:"fair" },
-  { code:"ha",  name:"Hausa",           tier:"fair" },
-  { code:"yo",  name:"Yorùbá",          tier:"fair" },
-  { code:"ig",  name:"Igbo",            tier:"fair" },
-  { code:"st",  name:"Sesotho",         tier:"fair" },
-  { code:"sn",  name:"chiShona",        tier:"fair" },
-  { code:"ny",  name:"Chichewa",        tier:"fair" },
-  { code:"mg",  name:"Malagasy",        tier:"fair" },
-  { code:"ta",  name:"தமிழ்",            tier:"fair" },
-  { code:"te",  name:"తెలుగు",           tier:"fair" },
-  { code:"mr",  name:"मराठी",            tier:"fair" },
-  { code:"gu",  name:"ગુજરાતી",          tier:"fair" },
-  { code:"pa",  name:"ਪੰਜਾਬੀ",            tier:"fair" },
-  { code:"ne",  name:"नेपाली",           tier:"fair" },
-  { code:"si",  name:"සිංහල",            tier:"fair" },
-  { code:"km",  name:"ខ្មែរ",             tier:"fair" },
-  { code:"my",  name:"မြန်မာ",           tier:"fair" },
-  { code:"ka",  name:"ქართული",         tier:"fair" },
-  { code:"hy",  name:"Հայերեն",         tier:"fair" },
-  { code:"az",  name:"Azərbaycan",      tier:"fair" },
-  { code:"kk",  name:"Қазақша",         tier:"fair" },
-  { code:"uz",  name:"O'zbek",          tier:"fair" },
+  { code:"so",    english:"Somali",                 native:"Soomaali",      tier:"fair" },
+  { code:"am",    english:"Amharic",                native:"አማርኛ",          tier:"fair" },
+  { code:"rw",    english:"Kinyarwanda",            native:"",              tier:"fair" },
+  { code:"zu",    english:"Zulu",                   native:"isiZulu",       tier:"fair" },
+  { code:"xh",    english:"Xhosa",                  native:"isiXhosa",      tier:"fair" },
+  { code:"ha",    english:"Hausa",                  native:"",              tier:"fair" },
+  { code:"yo",    english:"Yoruba",                 native:"Yorùbá",        tier:"fair" },
+  { code:"ig",    english:"Igbo",                   native:"",              tier:"fair" },
+  { code:"st",    english:"Sesotho",                native:"",              tier:"fair" },
+  { code:"sn",    english:"Shona",                  native:"chiShona",      tier:"fair" },
+  { code:"ny",    english:"Chichewa",               native:"",              tier:"fair" },
+  { code:"mg",    english:"Malagasy",               native:"",              tier:"fair" },
+  { code:"ta",    english:"Tamil",                  native:"தமிழ்",         tier:"fair" },
+  { code:"te",    english:"Telugu",                 native:"తెలుగు",        tier:"fair" },
+  { code:"mr",    english:"Marathi",                native:"मराठी",          tier:"fair" },
+  { code:"gu",    english:"Gujarati",               native:"ગુજરાતી",       tier:"fair" },
+  { code:"pa",    english:"Punjabi",                native:"ਪੰਜਾਬੀ",         tier:"fair" },
+  { code:"ne",    english:"Nepali",                 native:"नेपाली",        tier:"fair" },
+  { code:"si",    english:"Sinhala",                native:"සිංහල",         tier:"fair" },
+  { code:"km",    english:"Khmer",                  native:"ខ្មែរ",          tier:"fair" },
+  { code:"my",    english:"Burmese",                native:"မြန်မာ",        tier:"fair" },
+  { code:"ka",    english:"Georgian",               native:"ქართული",      tier:"fair" },
+  { code:"hy",    english:"Armenian",               native:"Հայերեն",       tier:"fair" },
+  { code:"az",    english:"Azerbaijani",            native:"Azərbaycan",    tier:"fair" },
+  { code:"kk",    english:"Kazakh",                 native:"Қазақша",       tier:"fair" },
+  { code:"uz",    english:"Uzbek",                  native:"O'zbek",        tier:"fair" },
 
   // --- rough (low-resource, newer — translation may be off) ---
-  { code:"ki",  name:"Gĩkũyũ",          tier:"rough" },
-  { code:"luo", name:"Dholuo (Luo)",    tier:"rough" },
-  { code:"kam", name:"Kĩkamba",         tier:"rough" },
-  { code:"om",  name:"Afaan Oromoo",    tier:"rough" },
-  { code:"ti",  name:"ትግርኛ (Tigrinya)",  tier:"rough" },
-  { code:"lg",  name:"Luganda",         tier:"rough" },
-  { code:"ee",  name:"Eʋegbe (Ewe)",    tier:"rough" },
-  { code:"tw",  name:"Twi",             tier:"rough" },
-  { code:"ak",  name:"Akan",            tier:"rough" },
-  { code:"ln",  name:"Lingála",         tier:"rough" },
-  { code:"ts",  name:"Xitsonga",        tier:"rough" }
+  { code:"ki",    english:"Kikuyu",                 native:"Gĩkũyũ",        tier:"rough" },
+  { code:"luo",   english:"Luo (Dholuo)",           native:"",              tier:"rough" },
+  { code:"kam",   english:"Kamba",                  native:"Kĩkamba",       tier:"rough" },
+  { code:"om",    english:"Oromo",                  native:"Afaan Oromoo",  tier:"rough" },
+  { code:"ti",    english:"Tigrinya",               native:"ትግርኛ",          tier:"rough" },
+  { code:"lg",    english:"Luganda",                native:"",              tier:"rough" },
+  { code:"ee",    english:"Ewe",                    native:"Eʋegbe",        tier:"rough" },
+  { code:"tw",    english:"Twi",                    native:"",              tier:"rough" },
+  { code:"ak",    english:"Akan",                   native:"",              tier:"rough" },
+  { code:"ln",    english:"Lingala",                native:"Lingála",       tier:"rough" },
+  { code:"ts",    english:"Tsonga",                 native:"Xitsonga",      tier:"rough" }
 ];
+
+/* how the picker shows each language: English first, native in parens if different */
+function langLabel(l){
+  if(!l.native || l.native === l.english) return l.english;
+  return l.english + " · " + l.native;
+}
 
 /* ---------- countries offered (optional flag next to user's name) ----------
    Voluntary. Never auto-detected. Users who skip it stay flag-less.
@@ -224,9 +234,9 @@ async function translate(text, from, to){
 function populateLangSelect(sel){
   sel.innerHTML = "";
   const groups = [
-    { tier:"strong", label:"Well supported" },
-    { tier:"fair",   label:"Regional — usable" },
-    { tier:"rough",  label:"Newer — translation still rough" }
+    { tier:"strong", label:"Reliable" },
+    { tier:"fair",   label:"Good — minor rough edges" },
+    { tier:"rough",  label:"Experimental — translation may be poor" }
   ];
   groups.forEach(g=>{
     const list = LANGS.filter(l=>l.tier===g.tier);
@@ -235,7 +245,7 @@ function populateLangSelect(sel){
     og.label = g.label;
     list.forEach(l=>{
       const o=document.createElement('option');
-      o.value=l.code; o.textContent=l.name; og.appendChild(o);
+      o.value=l.code; o.textContent=langLabel(l); og.appendChild(o);
     });
     sel.appendChild(og);
   });
@@ -570,7 +580,7 @@ $('backBtn').addEventListener('click', ()=>{
    - Future incoming messages translate to the new language.
    ============================================================ */
 function updateLangPill(){
-  const langName = LANGS.find(l=>l.code===me.lang).name;
+  const langName = LANGS.find(l=>l.code===me.lang).english;
   const flag = flagFor(me.country);
   $('myLangPill').textContent = (flag ? flag + " " : "") + langName;
 }
@@ -596,8 +606,8 @@ $('langDialog').addEventListener('click', e=>{
 $('langSwitchApply').addEventListener('click', ()=>{
   const newLang = $('langSwitchSelect').value;
   if(newLang === me.lang){ closeLangSheet(); return; }
-  const oldName = LANGS.find(l=>l.code===me.lang).name;
-  const newName = LANGS.find(l=>l.code===newLang).name;
+  const oldName = LANGS.find(l=>l.code===me.lang).english;
+  const newName = LANGS.find(l=>l.code===newLang).english;
   me.lang = newLang;
   updateLangPill();
   addSystemLine("You switched from " + oldName + " to " + newName + ". Future messages will reach you in " + newName + ".");
@@ -665,7 +675,7 @@ function startRecording(){
       if(ev.error === "not-allowed") toast("Microphone permission needed");
       else if(ev.error === "no-speech") toast("Didn't catch anything — try again");
       else if(ev.error === "language-not-supported")
-        toast("Voice not supported for " + LANGS.find(l=>l.code===me.lang).name);
+        toast("Voice not supported for " + LANGS.find(l=>l.code===me.lang).english);
       else toast("Voice error: " + ev.error);
     };
     recogniser.onend = ()=>{ if(isRecording) stopRecording(); };
