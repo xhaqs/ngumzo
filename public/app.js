@@ -265,12 +265,47 @@ function randomCode(){
 }
 
 $('createBtn').addEventListener('click', ()=>{
-  // New Room always makes a fresh code — ignores whatever is typed
-  $('codeInput').value = randomCode();
+  // validate name first — code is generated automatically
+  const name = $('nameInput').value.trim();
+  if(!name){ toast("Add your name first"); return; }
+  // generate the fresh code and show the invite screen
+  const code = randomCode();
+  $('codeInput').value = code;
+  $('inviteCode').textContent = code;
+  $('inviteCap').textContent = ROOM_CAPACITY;
+  show('inviteScreen');
   pingStat("room_created");
-  enterRoom();
 });
 $('joinBtn').addEventListener('click', enterRoom);
+
+/* ============================================================
+   INVITE SCREEN — share / copy / enter
+   ============================================================ */
+function buildInviteText(){
+  const code = $('inviteCode').textContent.trim();
+  const url  = location.origin + "/?room=" + encodeURIComponent(code);
+  return "Join my Ngumzo conversation — we can chat across languages.\n" +
+         "Room code: " + code + "\n" + url;
+}
+$('inviteShareBtn').addEventListener('click', async ()=>{
+  const text = buildInviteText();
+  if(navigator.share){
+    try{ await navigator.share({ text }); return; }catch(e){ /* user cancelled */ }
+  }
+  // fallback: open WhatsApp directly
+  const wa = "https://wa.me/?text=" + encodeURIComponent(text);
+  window.open(wa, "_blank");
+});
+$('inviteCopyBtn').addEventListener('click', async ()=>{
+  try{
+    await navigator.clipboard.writeText(buildInviteText());
+    toast("Invite copied — paste it anywhere");
+  }catch(e){
+    toast("Code: " + $('inviteCode').textContent);
+  }
+});
+$('inviteEnterBtn').addEventListener('click', ()=>{ enterRoom(); });
+$('inviteBack').addEventListener('click', ()=>{ show('joinScreen'); });
 
 /* ============================================================
    ROOM CAPACITY — testing-launch phase

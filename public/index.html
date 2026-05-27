@@ -170,6 +170,43 @@
   .priv strong{font-weight:600;}
   .priv .lock{font-size:13px;}
 
+  /* ---------- INVITE screen ---------- */
+  #inviteScreen{
+    justify-content:center;align-items:center;padding:28px 22px;overflow-y:auto;
+  }
+  .invite-wrap{
+    width:100%;max-width:392px;text-align:center;
+    background:var(--glass);border:1px solid var(--glass-line);
+    border-radius:26px;padding:30px 24px 24px;
+    backdrop-filter:blur(26px) saturate(1.5);
+    -webkit-backdrop-filter:blur(26px) saturate(1.5);
+    box-shadow:0 20px 60px rgba(0,0,0,0.5),
+               inset 0 1px 0 rgba(255,255,255,0.12);
+    animation:rise .6s cubic-bezier(.2,.8,.2,1) both;
+  }
+  .invite-eyebrow{
+    font-size:10.5px;letter-spacing:.18em;color:var(--text-dim);
+    font-weight:700;margin-bottom:14px;
+  }
+  .invite-code{
+    font-family:'Clash Display','Space Grotesk',sans-serif;
+    font-size:44px;font-weight:700;letter-spacing:.12em;
+    line-height:1;margin-bottom:18px;
+  }
+  .invite-hint{
+    font-size:12.5px;color:var(--text-dim);line-height:1.65;
+    margin-bottom:20px;
+  }
+  .invite-hint span{color:var(--text);font-weight:600;}
+  .invite-actions{display:flex;flex-direction:column;gap:9px;}
+  .invite-actions .btn{margin-top:0;}
+  .btn-ico{margin-right:4px;font-weight:700;}
+  .invite-back{
+    margin-top:18px;background:transparent;border:none;
+    color:var(--text-dim);font:inherit;font-size:12px;
+    cursor:pointer;padding:8px;letter-spacing:.04em;
+  }
+  .invite-back:active{color:var(--text);}
   /* ============================================================
      CHAT — plasma calmed to a CSS-only drifting wash
      ============================================================ */
@@ -402,6 +439,28 @@
       never sees your words. Translation is done by Google, so Google sees the
       text. Anyone with the room code can join — share it carefully.
     </div>
+  </div>
+</div>
+
+<!-- ============ INVITE SCREEN (after New Room) ============ -->
+<div class="screen" id="inviteScreen">
+  <div class="invite-wrap">
+    <div class="invite-eyebrow">YOUR ROOM IS READY</div>
+    <div class="invite-code irid" id="inviteCode">——</div>
+    <p class="invite-hint">Share this code with the people you want to chat with.
+      Up to <span id="inviteCap">6</span> people total can join. They each pick
+      their own language — the conversation reaches each of them in their own
+      words.</p>
+
+    <div class="invite-actions">
+      <button class="btn" id="inviteShareBtn">
+        <span class="btn-ico">↗</span> Share to WhatsApp
+      </button>
+      <button class="btn ghost" id="inviteCopyBtn">Copy code</button>
+      <button class="btn ghost" id="inviteEnterBtn">Enter the room</button>
+    </div>
+
+    <button class="invite-back" id="inviteBack">← back</button>
   </div>
 </div>
 
