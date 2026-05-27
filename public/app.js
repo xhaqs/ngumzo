@@ -20,30 +20,88 @@ import { getDatabase, ref, push, onChildAdded, query, limitToLast,
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 /* ---------- languages offered ----------
-   tier "strong"  = reliable machine translation
-   tier "fair"    = usable, region-relevant, less polished
+   tier "strong"  = reliable machine translation (Google's well-supported set)
+   tier "fair"    = usable, less polished
    tier "rough"   = newer / low-resource — translation may be off.
    The picker shows them grouped so a user chooses with eyes open. */
 const LANGS = [
-  // --- strong ---
-  { code:"sw",  name:"Kiswahili",   tier:"strong" },
-  { code:"en",  name:"English",     tier:"strong" },
-  { code:"fr",  name:"Français",    tier:"strong" },
-  { code:"ar",  name:"العربية",      tier:"strong" },
-  { code:"es",  name:"Español",     tier:"strong" },
-  { code:"pt",  name:"Português",   tier:"strong" },
-  { code:"de",  name:"Deutsch",     tier:"strong" },
-  { code:"zh",  name:"中文",          tier:"strong" },
-  { code:"hi",  name:"हिन्दी",        tier:"strong" },
-  // --- fair (regional) ---
-  { code:"so",  name:"Soomaali",    tier:"fair" },
-  { code:"am",  name:"አማርኛ (Amharic)", tier:"fair" },
-  { code:"rw",  name:"Kinyarwanda", tier:"fair" },
-  // --- rough (low-resource, newer) ---
-  { code:"ki",  name:"Gĩkũyũ",      tier:"rough" },
-  { code:"luo", name:"Dholuo (Luo)", tier:"rough" },
-  { code:"kam", name:"Kĩkamba",     tier:"rough" },
-  { code:"om",  name:"Afaan Oromoo", tier:"rough" }
+  // --- strong (large training data, high quality) ---
+  { code:"sw",  name:"Kiswahili",       tier:"strong" },
+  { code:"en",  name:"English",         tier:"strong" },
+  { code:"fr",  name:"Français",        tier:"strong" },
+  { code:"ar",  name:"العربية",          tier:"strong" },
+  { code:"es",  name:"Español",         tier:"strong" },
+  { code:"pt",  name:"Português",       tier:"strong" },
+  { code:"de",  name:"Deutsch",         tier:"strong" },
+  { code:"it",  name:"Italiano",        tier:"strong" },
+  { code:"nl",  name:"Nederlands",      tier:"strong" },
+  { code:"ru",  name:"Русский",         tier:"strong" },
+  { code:"pl",  name:"Polski",          tier:"strong" },
+  { code:"tr",  name:"Türkçe",          tier:"strong" },
+  { code:"zh-CN", name:"中文 (简体)",      tier:"strong" },
+  { code:"zh-TW", name:"中文 (繁體)",      tier:"strong" },
+  { code:"ja",  name:"日本語",            tier:"strong" },
+  { code:"ko",  name:"한국어",            tier:"strong" },
+  { code:"hi",  name:"हिन्दी",            tier:"strong" },
+  { code:"bn",  name:"বাংলা",            tier:"strong" },
+  { code:"ur",  name:"اردو",            tier:"strong" },
+  { code:"id",  name:"Bahasa Indonesia", tier:"strong" },
+  { code:"vi",  name:"Tiếng Việt",      tier:"strong" },
+  { code:"th",  name:"ไทย",              tier:"strong" },
+  { code:"el",  name:"Ελληνικά",        tier:"strong" },
+  { code:"he",  name:"עברית",            tier:"strong" },
+  { code:"fa",  name:"فارسی",            tier:"strong" },
+  { code:"sv",  name:"Svenska",         tier:"strong" },
+  { code:"no",  name:"Norsk",           tier:"strong" },
+  { code:"da",  name:"Dansk",           tier:"strong" },
+  { code:"fi",  name:"Suomi",           tier:"strong" },
+  { code:"cs",  name:"Čeština",         tier:"strong" },
+  { code:"hu",  name:"Magyar",          tier:"strong" },
+  { code:"ro",  name:"Română",          tier:"strong" },
+  { code:"uk",  name:"Українська",      tier:"strong" },
+  { code:"ms",  name:"Bahasa Melayu",   tier:"strong" },
+  { code:"tl",  name:"Tagalog",         tier:"strong" },
+
+  // --- fair (usable, less polished) ---
+  { code:"so",  name:"Soomaali",        tier:"fair" },
+  { code:"am",  name:"አማርኛ (Amharic)",   tier:"fair" },
+  { code:"rw",  name:"Kinyarwanda",     tier:"fair" },
+  { code:"zu",  name:"isiZulu",         tier:"fair" },
+  { code:"xh",  name:"isiXhosa",        tier:"fair" },
+  { code:"ha",  name:"Hausa",           tier:"fair" },
+  { code:"yo",  name:"Yorùbá",          tier:"fair" },
+  { code:"ig",  name:"Igbo",            tier:"fair" },
+  { code:"st",  name:"Sesotho",         tier:"fair" },
+  { code:"sn",  name:"chiShona",        tier:"fair" },
+  { code:"ny",  name:"Chichewa",        tier:"fair" },
+  { code:"mg",  name:"Malagasy",        tier:"fair" },
+  { code:"ta",  name:"தமிழ்",            tier:"fair" },
+  { code:"te",  name:"తెలుగు",           tier:"fair" },
+  { code:"mr",  name:"मराठी",            tier:"fair" },
+  { code:"gu",  name:"ગુજરાતી",          tier:"fair" },
+  { code:"pa",  name:"ਪੰਜਾਬੀ",            tier:"fair" },
+  { code:"ne",  name:"नेपाली",           tier:"fair" },
+  { code:"si",  name:"සිංහල",            tier:"fair" },
+  { code:"km",  name:"ខ្មែរ",             tier:"fair" },
+  { code:"my",  name:"မြန်မာ",           tier:"fair" },
+  { code:"ka",  name:"ქართული",         tier:"fair" },
+  { code:"hy",  name:"Հայերեն",         tier:"fair" },
+  { code:"az",  name:"Azərbaycan",      tier:"fair" },
+  { code:"kk",  name:"Қазақша",         tier:"fair" },
+  { code:"uz",  name:"O'zbek",          tier:"fair" },
+
+  // --- rough (low-resource, newer — translation may be off) ---
+  { code:"ki",  name:"Gĩkũyũ",          tier:"rough" },
+  { code:"luo", name:"Dholuo (Luo)",    tier:"rough" },
+  { code:"kam", name:"Kĩkamba",         tier:"rough" },
+  { code:"om",  name:"Afaan Oromoo",    tier:"rough" },
+  { code:"ti",  name:"ትግርኛ (Tigrinya)",  tier:"rough" },
+  { code:"lg",  name:"Luganda",         tier:"rough" },
+  { code:"ee",  name:"Eʋegbe (Ewe)",    tier:"rough" },
+  { code:"tw",  name:"Twi",             tier:"rough" },
+  { code:"ak",  name:"Akan",            tier:"rough" },
+  { code:"ln",  name:"Lingála",         tier:"rough" },
+  { code:"ts",  name:"Xitsonga",        tier:"rough" }
 ];
 
 /* ---------- countries offered (optional flag next to user's name) ----------
@@ -459,6 +517,8 @@ function updateLangPill(){
 function openLangSheet(){
   $('langSwitchSelect').value = me.lang;
   $('langSheet').hidden = false;
+  // (chat already pauses plasma — this is just belt-and-braces)
+  if(window.__plasma) window.__plasma.pause();
 }
 function closeLangSheet(){ $('langSheet').hidden = true; }
 
