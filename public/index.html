@@ -136,6 +136,11 @@
   select{appearance:none;
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%23a99cc4' stroke-width='2' fill='none' stroke-linecap='round'/></svg>");
     background-repeat:no-repeat;background-position:right 15px center;padding-right:40px;}
+  select optgroup{background:#1a1228;color:var(--text-dim);
+    font-size:12px;font-style:normal;}
+  select option{background:#15101f;color:var(--text);}
+  .pickernote{font-size:10.5px;color:var(--text-dim);
+    margin-top:6px;line-height:1.5;opacity:.85;}
 
   .btn{
     width:100%;min-height:var(--tap);font:inherit;font-size:15.5px;
@@ -190,11 +195,18 @@
     position:sticky;top:0;z-index:6;
   }
   .chat-head .room{flex:1;min-width:0;}
-  .chat-head .room .label{font-size:9.5px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--text-dim);}
   .chat-head .room .code{
     font-family:'Clash Display','Space Grotesk',sans-serif;
-    font-size:19px;font-weight:600;letter-spacing:.05em;}
+    font-size:19px;font-weight:600;letter-spacing:.05em;line-height:1.1;}
+  .presence{font-size:10.5px;margin-top:2px;letter-spacing:.03em;
+    display:flex;align-items:center;gap:5px;}
+  .presence::before{content:"";width:6px;height:6px;border-radius:50%;}
+  .presence.waiting{color:var(--text-dim);}
+  .presence.waiting::before{background:#e8b84b;
+    box-shadow:0 0 6px #e8b84b;}
+  .presence.sealed{color:#5fffd0;}
+  .presence.sealed::before{background:#5fffd0;
+    box-shadow:0 0 6px #5fffd0;}
   .icon-btn{
     width:44px;height:44px;flex:none;border-radius:13px;
     background:rgba(255,255,255,0.07);border:1px solid var(--glass-line);
@@ -313,6 +325,7 @@
 
     <label for="langSelect">You read &amp; write in</label>
     <select id="langSelect"></select>
+    <p class="pickernote">Newer languages are still rough — translation may not be accurate.</p>
 
     <label for="codeInput">Room code</label>
     <input id="codeInput" placeholder="Type a code to join, or leave blank" maxlength="12" autocomplete="off" style="text-transform:uppercase">
@@ -339,8 +352,8 @@
   <div class="chat-head">
     <button class="icon-btn" id="backBtn" aria-label="Leave">&#8592;</button>
     <div class="room">
-      <div class="label">Room</div>
       <div class="code irid" id="roomCodeLabel">——</div>
+      <div class="presence waiting" id="presence">connecting…</div>
     </div>
     <span class="lang-pill" id="myLangPill">—</span>
     <button class="icon-btn" id="shareBtn" aria-label="Share code">&#8682;</button>
@@ -376,7 +389,8 @@
   size();addEventListener('resize',size);
 
   // iridescent palette stops (r,g,b)
-  const stops=[[255,95,162],[160,107,255],[63,216,255],[95,255,208]];
+  // Kenyan-flag plasma palette: red, green, white, deep — sovereign
+  const stops=[[190,58,52],[31,138,76],[244,238,251],[20,16,32]];
   function mix(p){
     p=(p%1+1)%1;
     const n=stops.length, f=p*n, i=Math.floor(f), k=f-i;
@@ -399,9 +413,9 @@
         const c=mix(v*0.12 + t*0.02);
         const idx=(y*W+x)*4;
         // darkened toward the void base so text stays readable
-        d[idx]  =c[0]*0.42;
-        d[idx+1]=c[1]*0.42;
-        d[idx+2]=c[2]*0.46;
+        d[idx]  =c[0]*0.58;
+        d[idx+1]=c[1]*0.58;
+        d[idx+2]=c[2]*0.60;
         d[idx+3]=255;
       }
     }

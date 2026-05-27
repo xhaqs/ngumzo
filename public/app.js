@@ -15,21 +15,35 @@
    ============================================================ */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, push, onChildAdded, query, limitToLast }
+import { getDatabase, ref, push, onChildAdded, query, limitToLast,
+         get, set, remove, onValue, onDisconnect, child }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-/* ---------- languages offered in v1 ---------- */
+/* ---------- languages offered ----------
+   tier "strong"  = reliable machine translation
+   tier "fair"    = usable, region-relevant, less polished
+   tier "rough"   = newer / low-resource — translation may be off.
+   The picker shows them grouped so a user chooses with eyes open. */
 const LANGS = [
-  { code:"en",  name:"English" },
-  { code:"sw",  name:"Kiswahili" },
-  { code:"fr",  name:"Français" },
-  { code:"ar",  name:"العربية" },
-  { code:"es",  name:"Español" },
-  { code:"pt",  name:"Português" },
-  { code:"de",  name:"Deutsch" },
-  { code:"zh",  name:"中文" },
-  { code:"hi",  name:"हिन्दी" },
-  { code:"so",  name:"Soomaali" }
+  // --- strong ---
+  { code:"sw",  name:"Kiswahili",   tier:"strong" },
+  { code:"en",  name:"English",     tier:"strong" },
+  { code:"fr",  name:"Français",    tier:"strong" },
+  { code:"ar",  name:"العربية",      tier:"strong" },
+  { code:"es",  name:"Español",     tier:"strong" },
+  { code:"pt",  name:"Português",   tier:"strong" },
+  { code:"de",  name:"Deutsch",     tier:"strong" },
+  { code:"zh",  name:"中文",          tier:"strong" },
+  { code:"hi",  name:"हिन्दी",        tier:"strong" },
+  // --- fair (regional) ---
+  { code:"so",  name:"Soomaali",    tier:"fair" },
+  { code:"am",  name:"አማርኛ (Amharic)", tier:"fair" },
+  { code:"rw",  name:"Kinyarwanda", tier:"fair" },
+  // --- rough (low-resource, newer) ---
+  { code:"ki",  name:"Gĩkũyũ",      tier:"rough" },
+  { code:"luo", name:"Dholuo (Luo)", tier:"rough" },
+  { code:"kam", name:"Kĩkamba",     tier:"rough" },
+  { code:"om",  name:"Afaan Oromoo", tier:"rough" }
 ];
 
 /* ---------- tiny DOM helpers ---------- */
@@ -123,9 +137,21 @@ async function translate(text, from, to){
    ============================================================ */
 function fillLangs(){
   const sel = $('langSelect');
-  LANGS.forEach(l=>{
-    const o=document.createElement('option');
-    o.value=l.code; o.textContent=l.name; sel.appendChild(o);
+  const groups = [
+    { tier:"strong", label:"Well supported" },
+    { tier:"fair",   label:"Regional — usable" },
+    { tier:"rough",  label:"Newer — translation still rough" }
+  ];
+  groups.forEach(g=>{
+    const list = LANGS.filter(l=>l.tier===g.tier);
+    if(!list.length) return;
+    const og = document.createElement('optgroup');
+    og.label = g.label;
+    list.forEach(l=>{
+      const o=document.createElement('option');
+      o.value=l.code; o.textContent=l.name; og.appendChild(o);
+    });
+    sel.appendChild(og);
   });
   // best guess from the phone's language
   const guess = (navigator.language||"en").slice(0,2);
@@ -140,10 +166,14 @@ function randomCode(){
 }
 
 $('createBtn').addEventListener('click', ()=>{
+  // New Room always makes a fresh code — ignores whatever is typed
   $('codeInput').value = randomCode();
   enterRoom();
 });
 $('joinBtn').addEventListener('click', enterRoom);
+
+/* a stable per-device id for this session (one "seat" in a room) */
+const DEVICE_ID = 'd' + Math.random().toString(36).slice(2,11);
 
 async function enterRoom(){
   const name = $('nameInput').value.trim();
@@ -156,6 +186,30 @@ async function enterRoom(){
   me.lang = $('langSelect').value;
   room.code = code;
   room.key  = await deriveKey(code);
+
+  // ---- TWO-PERSON ROOM LOCK ----
+  // before entering, check the room is not already full.
+  const cfg = window.NGUMZO_CONFIG;
+  const configured = cfg && cfg.apiKey && cfg.databaseURL;
+  if(configured){
+    if(!db){
+      const fbApp = initializeApp(cfg);
+      db = getDatabase(fbApp);
+    }
+    try{
+      const seatsSnap = await get(ref(db, "rooms/"+code+"/seats"));
+      const seats = seatsSnap.val() || {};
+      const ids = Object.keys(seats);
+      // room is full only if 2 OTHER devices already hold seats
+      if(ids.length >= 2 && !ids.includes(DEVICE_ID)){
+        toast("That room is full — it already has two people.");
+        return;
+      }
+    }catch(e){
+      // if the check fails, fail safe: let them in rather than lock out
+      console.warn("seat check failed", e);
+    }
+  }
 
   $('roomCodeLabel').textContent = code;
   $('myLangPill').textContent = LANGS.find(l=>l.code===me.lang).name;
@@ -170,6 +224,9 @@ async function enterRoom(){
 /* ============================================================
    RELAY  — Firebase Realtime Database (stores ciphertext only)
    ============================================================ */
+let seatRef = null;       // this device's seat in the room
+let seatsListenerOff = null;
+
 function connectRelay(){
   const cfg = window.NGUMZO_CONFIG;
   const configured = cfg && cfg.apiKey && cfg.databaseURL;
@@ -185,10 +242,23 @@ function connectRelay(){
   $('cfgBanner').style.display = "none";
 
   if(!db){
-    const app = initializeApp(cfg);
-    db = getDatabase(app);
+    const fbApp = initializeApp(cfg);
+    db = getDatabase(fbApp);
   }
-  // listen to the last 100 messages in this room
+
+  // ---- claim a seat, and free it automatically if we disconnect ----
+  seatRef = ref(db, "rooms/"+room.code+"/seats/"+DEVICE_ID);
+  set(seatRef, { name: me.name, ts: Date.now() });
+  onDisconnect(seatRef).remove();   // tab closed / network lost -> seat frees
+
+  // ---- watch how many people are in the room ----
+  const allSeats = ref(db, "rooms/"+room.code+"/seats");
+  seatsListenerOff = onValue(allSeats, snap=>{
+    const seats = snap.val() || {};
+    updatePresence(Object.keys(seats).length);
+  });
+
+  // ---- listen to the last 100 messages ----
   const msgsRef = query(ref(db, "rooms/"+room.code+"/messages"), limitToLast(100));
   onChildAdded(msgsRef, snap=>{
     const id = snap.key;
@@ -197,6 +267,28 @@ function connectRelay(){
     renderIncoming(id, snap.val());
   });
   addSystemLine("Connected. Share the code so one other person can join.");
+}
+
+/* show "1 here · waiting" or "2 here · sealed" in the header */
+function updatePresence(count){
+  const el = $('presence');
+  if(!el) return;
+  if(count <= 1){
+    el.textContent = "1 here · waiting";
+    el.className = "presence waiting";
+  }else{
+    el.textContent = count + " here · room sealed";
+    el.className = "presence sealed";
+  }
+}
+
+/* free our seat when leaving the room */
+function leaveRoom(){
+  try{
+    if(seatRef) remove(seatRef);
+    if(seatsListenerOff) seatsListenerOff();
+  }catch(e){}
+  seatRef = null; seatsListenerOff = null;
 }
 
 /* ============================================================
@@ -303,6 +395,7 @@ $('shareBtn').addEventListener('click', async ()=>{
 });
 $('backBtn').addEventListener('click', ()=>{
   if(confirm("Leave this conversation?")){
+    leaveRoom();
     show('joinScreen');
   }
 });

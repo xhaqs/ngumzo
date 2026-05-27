@@ -1,12 +1,4 @@
 {
-  "//": "NGUMZO — Realtime Database security rules.",
-  "//1": "Paste this into Firebase console > Realtime Database > Rules.",
-  "//2": "What it does: anyone can read/write under a room (the app is",
-  "//3": "open-join by design in v1), BUT every stored message must be",
-  "//4": "shaped { c: <string>, ts: <number> } — i.e. ciphertext only.",
-  "//5": "A client cannot write plaintext fields. The relay holds nothing",
-  "//6": "readable. It also caps message size to discourage abuse.",
-
   "rules": {
     "rooms": {
       "$room": {
@@ -14,9 +6,19 @@
           ".read": true,
           ".write": true,
           "$msg": {
-            ".validate": "newData.hasChildren(['c','ts']) && newData.children().val().length <= 2",
+            ".validate": "newData.hasChildren(['c','ts'])",
             "c":  { ".validate": "newData.isString() && newData.val().length < 8000" },
             "ts": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+        "seats": {
+          ".read": true,
+          ".write": true,
+          "$device": {
+            ".validate": "newData.hasChildren(['name','ts'])",
+            "name": { ".validate": "newData.isString() && newData.val().length < 60" },
+            "ts":   { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }
           }
         }
