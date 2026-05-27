@@ -267,9 +267,17 @@ function randomCode(){
 $('createBtn').addEventListener('click', ()=>{
   // New Room always makes a fresh code — ignores whatever is typed
   $('codeInput').value = randomCode();
+  pingStat("room_created");
   enterRoom();
 });
 $('joinBtn').addEventListener('click', enterRoom);
+
+/* ============================================================
+   ROOM CAPACITY — testing-launch phase
+   Raised from 2 to 6 so testers can share with small groups.
+   Will be configurable per-room in a later version.
+   ============================================================ */
+const ROOM_CAPACITY = 6;
 
 /* a stable per-device id for this session (one "seat" in a room) */
 const DEVICE_ID = 'd' + Math.random().toString(36).slice(2,11);
@@ -301,8 +309,8 @@ async function enterRoom(){
       const seats = seatsSnap.val() || {};
       const ids = Object.keys(seats);
       // room is full only if 2 OTHER devices already hold seats
-      if(ids.length >= 2 && !ids.includes(DEVICE_ID)){
-        toast("That room is full — it already has two people.");
+      if(ids.length >= ROOM_CAPACITY && !ids.includes(DEVICE_ID)){
+        toast("That room is full — already has " + ROOM_CAPACITY + " people.");
         return;
       }
     }catch(e){
@@ -366,19 +374,22 @@ function connectRelay(){
     seen.add(id);
     renderIncoming(id, snap.val());
   });
-  addSystemLine("Connected. Share the code so one other person can join.");
+  addSystemLine("Connected. Share the code — up to " + ROOM_CAPACITY + " people can join.");
 }
 
-/* show "1 here · waiting" or "2 here · sealed" in the header */
+/* show "n here" / "n here · room full" in the header */
 function updatePresence(count){
   const el = $('presence');
   if(!el) return;
-  if(count <= 1){
-    el.textContent = "1 here · waiting";
+  if(count <= 0){
+    el.textContent = "connecting…";
     el.className = "presence waiting";
-  }else{
-    el.textContent = count + " here · room sealed";
+  } else if(count >= ROOM_CAPACITY){
+    el.textContent = count + " here · room full";
     el.className = "presence sealed";
+  } else {
+    el.textContent = count + " here";
+    el.className = "presence waiting";
   }
 }
 
@@ -425,6 +436,7 @@ async function sendMessage(){
     c: cipher,            // ciphertext — the relay sees only this
     ts: payload.ts        // timestamp left clear, for ordering
   });
+  pingStat("message_sent");
 }
 
 /* ============================================================
@@ -465,6 +477,19 @@ function renderBubble({mine,name,country,original,shown,fromLang,ts}){
     (showOriginal
       ? `<div class="original">“${escapeHtml(original)}”</div>` : ``) +
     `<div class="meta">${nameLine} · ${time}</div>`;
+
+  // speak button on INCOMING bubbles — read the translation aloud in MY language
+  if(!mine && 'speechSynthesis' in window){
+    const speakBtn = document.createElement('button');
+    speakBtn.className = 'speak-btn';
+    speakBtn.type = 'button';
+    speakBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" '+
+      'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'+
+      '<path d="M11 5L6 9H2v6h4l5 4V5z"/>'+
+      '<path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg> hear it';
+    speakBtn.addEventListener('click', ()=> speakText(shown, me.lang, speakBtn));
+    wrap.appendChild(speakBtn);
+  }
 
   box.appendChild(wrap);
   box.scrollTop = box.scrollHeight;
@@ -538,6 +563,134 @@ $('langSwitchApply').addEventListener('click', ()=>{
   addSystemLine("You switched from " + oldName + " to " + newName + ". Future messages will reach you in " + newName + ".");
   closeLangSheet();
 });
+
+/* ============================================================
+   VOICE INPUT  — speak, the words land in the composer
+   Uses the browser's built-in SpeechRecognition. Free, on-device
+   on most Android browsers. Quality varies by language — same
+   honest tier story as translation.
+   ============================================================ */
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recogniser = null;
+let isRecording = false;
+
+/* speech-recognition language tags differ slightly from translation codes */
+function speechTagFor(langCode){
+  const map = {
+    en:"en-US", sw:"sw-KE", fr:"fr-FR", ar:"ar-SA", es:"es-ES",
+    pt:"pt-BR", de:"de-DE", it:"it-IT", nl:"nl-NL", ru:"ru-RU",
+    pl:"pl-PL", tr:"tr-TR", ja:"ja-JP", ko:"ko-KR", hi:"hi-IN",
+    bn:"bn-IN", ur:"ur-PK", id:"id-ID", vi:"vi-VN", th:"th-TH",
+    el:"el-GR", he:"he-IL", fa:"fa-IR", sv:"sv-SE", no:"nb-NO",
+    da:"da-DK", fi:"fi-FI", cs:"cs-CZ", hu:"hu-HU", ro:"ro-RO",
+    uk:"uk-UA", ms:"ms-MY", tl:"fil-PH", so:"so-SO", am:"am-ET",
+    "zh-CN":"zh-CN", "zh-TW":"zh-TW", zu:"zu-ZA", xh:"xh-ZA",
+    ta:"ta-IN", te:"te-IN", mr:"mr-IN", gu:"gu-IN", pa:"pa-IN",
+    ne:"ne-NP", si:"si-LK", km:"km-KH", my:"my-MM", ka:"ka-GE",
+    hy:"hy-AM", az:"az-AZ", kk:"kk-KZ", uz:"uz-UZ"
+  };
+  return map[langCode] || langCode;
+}
+
+if(!SpeechRec){
+  // browser doesn't support speech input — hide the button rather than confuse
+  const mb = $('micBtn'); if(mb) mb.style.display = "none";
+}
+
+$('micBtn') && $('micBtn').addEventListener('click', ()=>{
+  if(!SpeechRec){ toast("Voice input not supported on this browser"); return; }
+  if(isRecording){ stopRecording(); return; }
+  startRecording();
+});
+
+function startRecording(){
+  try{
+    recogniser = new SpeechRec();
+    recogniser.lang = speechTagFor(me.lang || "en");
+    recogniser.continuous = false;
+    recogniser.interimResults = true;
+    recogniser.maxAlternatives = 1;
+
+    const inp = $('msgInput');
+    const startText = inp.value;
+    recogniser.onresult = (ev)=>{
+      let t = "";
+      for(let i = ev.resultIndex; i < ev.results.length; i++){
+        t += ev.results[i][0].transcript;
+      }
+      inp.value = startText ? (startText + " " + t) : t;
+    };
+    recogniser.onerror = (ev)=>{
+      stopRecording();
+      if(ev.error === "not-allowed") toast("Microphone permission needed");
+      else if(ev.error === "no-speech") toast("Didn't catch anything — try again");
+      else if(ev.error === "language-not-supported")
+        toast("Voice not supported for " + LANGS.find(l=>l.code===me.lang).name);
+      else toast("Voice error: " + ev.error);
+    };
+    recogniser.onend = ()=>{ if(isRecording) stopRecording(); };
+    recogniser.start();
+    isRecording = true;
+    $('micBtn').classList.add('recording');
+    $('micBtn').setAttribute('aria-label','Stop recording');
+  }catch(e){
+    toast("Could not start voice input");
+    isRecording = false;
+  }
+}
+function stopRecording(){
+  try{ if(recogniser) recogniser.stop(); }catch(e){}
+  recogniser = null;
+  isRecording = false;
+  const mb = $('micBtn'); if(mb){
+    mb.classList.remove('recording');
+    mb.setAttribute('aria-label','Speak');
+  }
+}
+
+/* ============================================================
+   VOICE OUTPUT  — speak button on incoming translated bubbles
+   Uses speechSynthesis. Voice quality depends on the device's
+   installed voices — beyond our control, but free and offline.
+   ============================================================ */
+let currentUtterance = null;
+
+function speakText(text, langCode, btn){
+  if(!('speechSynthesis' in window)){
+    toast("Speak-aloud not supported on this browser"); return;
+  }
+  // stop anything already playing (avoids overlap)
+  window.speechSynthesis.cancel();
+  if(currentUtterance && btn !== currentUtterance.__btn){
+    if(currentUtterance.__btn) currentUtterance.__btn.classList.remove('playing');
+  }
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = speechTagFor(langCode);
+  u.rate = 1.0;
+  u.__btn = btn;
+  u.onend = ()=>{ if(btn) btn.classList.remove('playing'); currentUtterance = null; };
+  u.onerror = ()=>{ if(btn) btn.classList.remove('playing'); currentUtterance = null; };
+  currentUtterance = u;
+  if(btn) btn.classList.add('playing');
+  window.speechSynthesis.speak(u);
+}
+
+/* ============================================================
+   ANALYTICS — privacy-respecting counts only
+   Reports: app opens, rooms created, messages sent.
+   Never reports: message content, who-talked-to-whom, room codes.
+   Fire-and-forget to /api/stats — failure is silent and never blocks.
+   ============================================================ */
+function pingStat(event){
+  try{
+    fetch("/api/stats", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ event: event })
+    }).catch(()=>{});
+  }catch(e){}
+}
+pingStat("open");
 
 /* ============================================================
    BOOT
