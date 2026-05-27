@@ -264,28 +264,33 @@
   .opt{color:var(--text-dim);font-weight:400;font-size:9px;
     letter-spacing:.06em;text-transform:none;margin-left:6px;}
 
-  /* ---------- modal sheet (language switch) ---------- */
+  /* ---------- modal sheet (language switch) ----------
+     Deliberately simple — no transforms, no fill-mode tricks.
+     Just opacity, position, and visibility. Works on every Android
+     browser without surprises. */
   .sheet{
-    position:fixed;inset:0;z-index:200;display:flex;
-    align-items:flex-end;justify-content:center;
+    position:fixed;left:0;right:0;top:0;bottom:0;
+    z-index:200;
     background:rgba(0,0,0,0.72);
-    animation:fadeIn .2s ease;
+    display:flex;align-items:flex-end;justify-content:center;
+    opacity:1;
   }
-  .sheet[hidden]{display:none;}
-  @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+  .sheet[hidden]{display:none !important;}
   .sheet-card{
-    width:100%;max-width:480px;background:#15101f;
+    width:100%;max-width:480px;
+    background:#15101f;
     border:1px solid var(--glass-line);
-    border-radius:22px 22px 0 0;padding:20px 20px 28px;
+    border-top-left-radius:22px;border-top-right-radius:22px;
+    padding:20px 20px 28px;
     box-shadow:0 -20px 50px rgba(0,0,0,0.7);
-    animation:slideUp .26s cubic-bezier(.2,.8,.2,1);
     position:relative;z-index:1;
+    color:var(--text);
   }
-  @keyframes slideUp{from{transform:translateY(40px);opacity:0;}to{transform:none;opacity:1;}}
   .sheet-head{
     display:flex;align-items:center;justify-content:space-between;
     font-family:'Clash Display','Space Grotesk',sans-serif;
     font-size:17px;font-weight:600;margin-bottom:12px;
+    color:var(--text);
   }
 
   .messages{

@@ -576,11 +576,16 @@ function updateLangPill(){
 }
 function openLangSheet(){
   $('langSwitchSelect').value = me.lang;
-  $('langSheet').hidden = false;
-  // (chat already pauses plasma — this is just belt-and-braces)
+  const sheet = $('langSheet');
+  sheet.hidden = false;
+  sheet.style.display = "flex";   // explicit — overrides any inherited rule
   if(window.__plasma) window.__plasma.pause();
 }
-function closeLangSheet(){ $('langSheet').hidden = true; }
+function closeLangSheet(){
+  const sheet = $('langSheet');
+  sheet.hidden = true;
+  sheet.style.display = "none";
+}
 
 $('myLangPill').addEventListener('click', openLangSheet);
 $('sheetClose').addEventListener('click', closeLangSheet);
