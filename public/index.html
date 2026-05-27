@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0612">
+<title>Ngumzo — talk across languages</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Clash Display may not always load from this CDN; graceful fallback below -->
+<link href="https://api.fontshare.com/v2/css?f[]=clash-display@600,700,500&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     NGUMZO v1 — immersive · iridescent plasma · glassmorphism
+     Built for a young audience: alive, floating, premium.
+     Energy on the join screen; calmed (CSS-only) behind the chat
+     so reading stays smooth and the A04 stays cool.
+     ============================================================ */
+  :root{
+    --void:#0a0612;            /* deep midnight-violet base */
+    --void-2:#120a1f;
+    --glass:rgba(255,255,255,0.07);
+    --glass-line:rgba(255,255,255,0.14);
+    --text:#f3eefb;
+    --text-dim:#a99cc4;
+    --c1:#ff5fa2;              /* iridescent stops */
+    --c2:#a06bff;
+    --c3:#3fd8ff;
+    --c4:#5fffd0;
+    --tap:50px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    background:var(--void);color:var(--text);
+    font-family:'Space Grotesk',sans-serif;font-size:16px;line-height:1.5;
+    -webkit-text-size-adjust:100%;overflow:hidden;
+    display:flex;flex-direction:column;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  .display{font-family:'Clash Display','Space Grotesk',sans-serif;}
+
+  /* ---- shared animated iridescent text ---- */
+  .irid{
+    background:linear-gradient(110deg,var(--c1),var(--c2),var(--c3),var(--c4),var(--c1));
+    background-size:300% 100%;
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    animation:iridShift 8s linear infinite;
+  }
+  @keyframes iridShift{to{background-position:300% 0;}}
+
+  /* ============================================================
+     PLASMA CANVAS — full rich animation, join screen only
+     ============================================================ */
+  #plasma{position:fixed;inset:0;z-index:0;display:block;}
+  /* drifting glow orbs — Kenyan flag colours (red, green, white)
+     over the iridescent plasma: sovereign, unmistakably Kenyan */
+  .orb{
+    position:fixed;border-radius:50%;z-index:1;pointer-events:none;
+    filter:blur(62px);mix-blend-mode:screen;
+  }
+  .orb.a{width:290px;height:290px;background:#be3a34;opacity:.62;
+    animation:float1 19s ease-in-out infinite;}   /* flag red */
+  .orb.b{width:250px;height:250px;background:#1f8a4c;opacity:.6;
+    animation:float2 23s ease-in-out infinite;}   /* flag green */
+  .orb.c{width:190px;height:190px;background:#f4eefb;opacity:.32;
+    animation:float3 27s ease-in-out infinite;}   /* flag white */
+  @keyframes float1{
+    0%,100%{transform:translate(-10vw,-6vh);}
+    50%{transform:translate(40vw,30vh);}}
+  @keyframes float2{
+    0%,100%{transform:translate(70vw,10vh);}
+    50%{transform:translate(20vw,60vh);}}
+  @keyframes float3{
+    0%,100%{transform:translate(30vw,80vh);}
+    50%{transform:translate(75vw,35vh);}}
+
+  /* ============================================================
+     SCREENS
+     ============================================================ */
+  .screen{display:none;flex-direction:column;flex:1;min-height:0;
+    position:relative;z-index:2;}
+  .screen.active{display:flex;}
+
+  /* ---------- JOIN ---------- */
+  #joinScreen{justify-content:center;align-items:center;
+    padding:24px 20px;overflow-y:auto;}
+  .brand{text-align:center;margin-bottom:26px;
+    animation:rise .8s cubic-bezier(.2,.8,.2,1) both;}
+  .brand .mark{
+    width:74px;height:74px;margin:0 auto 14px;display:block;
+    filter:drop-shadow(0 0 22px rgba(160,107,255,0.6));
+    animation:bob 5s ease-in-out infinite;
+  }
+  @keyframes bob{50%{transform:translateY(-9px);}}
+  .brand h1{
+    font-family:'Clash Display','Space Grotesk',sans-serif;
+    font-size:46px;font-weight:700;letter-spacing:-.02em;line-height:1;
+  }
+  .brand .tag{font-size:13.5px;color:var(--text-dim);margin-top:9px;
+    letter-spacing:.01em;font-weight:500;}
+
+  /* glass card */
+  .card{
+    width:100%;max-width:392px;
+    background:var(--glass);border:1px solid var(--glass-line);
+    border-radius:26px;padding:24px 22px;
+    backdrop-filter:blur(26px) saturate(1.5);
+    -webkit-backdrop-filter:blur(26px) saturate(1.5);
+    box-shadow:0 20px 60px rgba(0,0,0,0.5),
+               inset 0 1px 0 rgba(255,255,255,0.12);
+    animation:rise .8s .15s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes rise{from{opacity:0;transform:translateY(26px);}to{opacity:1;transform:none;}}
+  .card h2{font-family:'Clash Display','Space Grotesk',sans-serif;
+    font-size:22px;font-weight:600;margin-bottom:5px;}
+  .card p.hint{font-size:12.5px;color:var(--text-dim);
+    margin-bottom:14px;line-height:1.6;}
+
+  label{display:block;font-size:10.5px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--text-dim);font-weight:600;
+    margin:15px 0 7px;}
+  input,select{
+    width:100%;min-height:var(--tap);font:inherit;font-size:15px;
+    background:rgba(0,0,0,0.32);color:var(--text);
+    border:1px solid var(--glass-line);border-radius:14px;padding:12px 15px;
+    transition:.16s ease;
+  }
+  input:focus,select:focus{
+    outline:none;border-color:var(--c2);
+    box-shadow:0 0 0 3px rgba(160,107,255,0.22),
+               0 0 22px rgba(160,107,255,0.25);
+  }
+  input::placeholder{color:#6c5f86;}
+  select{appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%23a99cc4' stroke-width='2' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat:no-repeat;background-position:right 15px center;padding-right:40px;}
+
+  .btn{
+    width:100%;min-height:var(--tap);font:inherit;font-size:15.5px;
+    font-weight:600;cursor:pointer;border:none;border-radius:14px;
+    color:#fff;position:relative;overflow:hidden;
+    background:linear-gradient(110deg,var(--c1),var(--c2),var(--c3));
+    background-size:200% 100%;
+    box-shadow:0 10px 30px rgba(160,107,255,0.4);
+    transition:.16s ease;
+    animation:btnShift 6s linear infinite;
+  }
+  @keyframes btnShift{to{background-position:200% 0;}}
+  .btn:active{transform:translateY(2px) scale(.99);
+    box-shadow:0 5px 16px rgba(160,107,255,0.4);}
+  .btn.ghost{
+    background:rgba(255,255,255,0.06);color:var(--text);
+    border:1px solid var(--glass-line);box-shadow:none;animation:none;
+  }
+  .row{display:flex;gap:11px;}
+  .row .btn{margin-top:0;}
+  .row{margin-top:20px;}
+
+  .priv{
+    margin-top:18px;font-size:11px;color:var(--text-dim);line-height:1.65;
+    border-top:1px solid var(--glass-line);padding-top:14px;
+  }
+  .priv strong{font-weight:600;}
+  .priv .lock{font-size:13px;}
+
+  /* ============================================================
+     CHAT — plasma calmed to a CSS-only drifting wash
+     ============================================================ */
+  #chatScreen{background:var(--void);}
+  /* lightweight animated backdrop — no canvas, easy on battery */
+  #chatScreen::before{
+    content:"";position:absolute;inset:-40%;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(40% 30% at 25% 25%, rgba(255,95,162,0.20), transparent 70%),
+      radial-gradient(45% 35% at 78% 35%, rgba(63,216,255,0.16), transparent 70%),
+      radial-gradient(40% 40% at 50% 85%, rgba(95,255,208,0.14), transparent 70%);
+    animation:wash 24s ease-in-out infinite alternate;
+  }
+  @keyframes wash{
+    0%{transform:translate(0,0) scale(1);}
+    100%{transform:translate(6%,-5%) scale(1.15);}}
+  #chatScreen>*{position:relative;z-index:1;}
+
+  .chat-head{
+    display:flex;align-items:center;gap:11px;padding:11px 14px;
+    background:var(--glass);border-bottom:1px solid var(--glass-line);
+    backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+    position:sticky;top:0;z-index:6;
+  }
+  .chat-head .room{flex:1;min-width:0;}
+  .chat-head .room .label{font-size:9.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--text-dim);}
+  .chat-head .room .code{
+    font-family:'Clash Display','Space Grotesk',sans-serif;
+    font-size:19px;font-weight:600;letter-spacing:.05em;}
+  .icon-btn{
+    width:44px;height:44px;flex:none;border-radius:13px;
+    background:rgba(255,255,255,0.07);border:1px solid var(--glass-line);
+    color:var(--text);cursor:pointer;font-size:16px;
+    display:flex;align-items:center;justify-content:center;transition:.14s;
+  }
+  .icon-btn:active{transform:scale(.92);background:rgba(255,255,255,0.14);}
+  .lang-pill{
+    font-size:11px;color:var(--text);background:rgba(255,255,255,0.07);
+    border:1px solid var(--glass-line);border-radius:999px;
+    padding:6px 11px;white-space:nowrap;font-weight:500;
+  }
+
+  .messages{
+    flex:1;overflow-y:auto;padding:18px 13px 10px;
+    display:flex;flex-direction:column;gap:13px;
+  }
+  .msg{max-width:84%;display:flex;flex-direction:column;gap:4px;
+    animation:pop .34s cubic-bezier(.2,.9,.25,1.2) both;}
+  @keyframes pop{from{opacity:0;transform:translateY(12px) scale(.96);}
+    to{opacity:1;transform:none;}}
+  .msg.mine{align-self:flex-end;align-items:flex-end;}
+  .msg.theirs{align-self:flex-start;align-items:flex-start;}
+  .bubble{
+    padding:11px 15px;border-radius:20px;font-size:15px;line-height:1.5;
+    word-wrap:break-word;backdrop-filter:blur(8px);
+  }
+  .msg.mine .bubble{
+    color:#fff;border-bottom-right-radius:6px;
+    background:linear-gradient(135deg,var(--c2),var(--c1));
+    box-shadow:0 6px 20px rgba(255,95,162,0.32);
+  }
+  .msg.theirs .bubble{
+    background:var(--glass);border:1px solid var(--glass-line);
+    border-bottom-left-radius:6px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.3);
+  }
+  .original{font-size:12px;color:var(--text-dim);font-style:italic;padding:0 7px;}
+  .msg.mine .original{text-align:right;}
+  .meta{font-size:10px;color:#6c5f86;padding:0 7px;letter-spacing:.04em;}
+
+  .sysline{
+    align-self:center;font-size:11px;color:var(--text-dim);
+    background:var(--glass);border:1px solid var(--glass-line);
+    padding:6px 14px;border-radius:999px;letter-spacing:.02em;
+    backdrop-filter:blur(8px);
+  }
+
+  .composer{
+    display:flex;gap:10px;padding:11px 12px;
+    background:var(--glass);border-top:1px solid var(--glass-line);
+    backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+  }
+  .composer input{flex:1;border-radius:26px;}
+  .send{
+    width:var(--tap);height:var(--tap);flex:none;border-radius:50%;
+    border:none;cursor:pointer;color:#fff;font-size:19px;
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--c1),var(--c2),var(--c3));
+    background-size:200% 100%;
+    box-shadow:0 8px 22px rgba(160,107,255,0.45);
+    animation:btnShift 6s linear infinite;
+  }
+  .send:active{transform:scale(.9);}
+  .send:disabled{opacity:.4;}
+
+  .toast{
+    position:fixed;left:50%;bottom:88px;transform:translateX(-50%);
+    background:rgba(255,255,255,0.95);color:#0a0612;font-size:13px;
+    font-weight:600;padding:12px 19px;border-radius:999px;z-index:50;
+    max-width:88vw;text-align:center;box-shadow:0 10px 34px rgba(0,0,0,0.6);
+  }
+  .banner{
+    background:linear-gradient(90deg,rgba(255,95,162,0.18),rgba(160,107,255,0.18));
+    border-bottom:1px solid var(--glass-line);
+    font-size:11px;text-align:center;padding:8px 14px;line-height:1.5;
+  }
+  ::-webkit-scrollbar{width:0;}
+</style>
+</head>
+<body>
+
+<!-- immersive layers (visible behind join screen) -->
+<canvas id="plasma"></canvas>
+<div class="orb a"></div>
+<div class="orb b"></div>
+<div class="orb c"></div>
+
+<!-- ============ JOIN SCREEN ============ -->
+<div class="screen active" id="joinScreen">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 74 74" aria-hidden="true">
+      <defs>
+        <linearGradient id="cg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ff5fa2"/>
+          <stop offset="0.5" stop-color="#a06bff"/>
+          <stop offset="1" stop-color="#3fd8ff"/>
+        </linearGradient>
+      </defs>
+      <path d="M10 18 q0-7 7-7 h24 q7 0 7 7 v12 q0 7-7 7 h-17 l-10 9 v-9 q-4 0-4-7 z"
+            fill="none" stroke="url(#cg)" stroke-width="3.4"/>
+      <path d="M64 38 q0-7-7-7 h-17 q-7 0-7 7 v12 q0 7 7 7 h10 l10 9 v-9 q4 0 4-7 z"
+            fill="url(#cg)" opacity="0.92"/>
+    </svg>
+    <h1 class="irid">Ngumzo</h1>
+    <div class="tag">Talk across languages — privately</div>
+  </div>
+
+  <div class="card">
+    <h2>Start a conversation</h2>
+    <p class="hint">Make a room, send the code to one person. You each pick your
+      own language — the conversation reaches each of you in your own words.</p>
+
+    <label for="nameInput">Your name</label>
+    <input id="nameInput" placeholder="What should they call you?" maxlength="24" autocomplete="off">
+
+    <label for="langSelect">You read &amp; write in</label>
+    <select id="langSelect"></select>
+
+    <label for="codeInput">Room code</label>
+    <input id="codeInput" placeholder="Type a code to join, or leave blank" maxlength="12" autocomplete="off" style="text-transform:uppercase">
+
+    <div class="row">
+      <button class="btn" id="joinBtn">Join Room</button>
+      <button class="btn ghost" id="createBtn">New Room</button>
+    </div>
+
+    <div class="priv">
+      <span class="lock">&#128274;</span> <strong>What stays private:</strong>
+      messages are scrambled on your phone before they're sent — Ngumzo's relay
+      never sees your words. Translation is done by Google, so Google sees the
+      text. Anyone with the room code can join — share it carefully.
+    </div>
+  </div>
+</div>
+
+<!-- ============ CHAT SCREEN ============ -->
+<div class="screen" id="chatScreen">
+  <div class="banner" id="cfgBanner" style="display:none">
+    Demo mode — no relay connected. Messages stay on this device only.
+  </div>
+  <div class="chat-head">
+    <button class="icon-btn" id="backBtn" aria-label="Leave">&#8592;</button>
+    <div class="room">
+      <div class="label">Room</div>
+      <div class="code irid" id="roomCodeLabel">——</div>
+    </div>
+    <span class="lang-pill" id="myLangPill">—</span>
+    <button class="icon-btn" id="shareBtn" aria-label="Share code">&#8682;</button>
+  </div>
+
+  <div class="messages" id="messages"></div>
+
+  <div class="composer">
+    <input id="msgInput" placeholder="Write in your language…" autocomplete="off">
+    <button class="send" id="sendBtn" aria-label="Send">&#10148;</button>
+  </div>
+</div>
+
+<!-- ============ PLASMA ENGINE ============ -->
+<script>
+/* Lightweight iridescent plasma — flowing layered sine field.
+   Runs only while the join screen is visible; pauses on the chat
+   screen so the conversation scrolls smoothly and the phone stays cool. */
+(function(){
+  const cv=document.getElementById('plasma');
+  const ctx=cv.getContext('2d');
+  let W,H,t=0,raf=null,running=true;
+
+  // low-res buffer scaled up = cheap on a budget phone
+  const SCALE=10;
+  function size(){
+    W=Math.ceil(innerWidth/SCALE);
+    H=Math.ceil(innerHeight/SCALE);
+    cv.width=W;cv.height=H;
+    cv.style.width=innerWidth+'px';
+    cv.style.height=innerHeight+'px';
+  }
+  size();addEventListener('resize',size);
+
+  // iridescent palette stops (r,g,b)
+  const stops=[[255,95,162],[160,107,255],[63,216,255],[95,255,208]];
+  function mix(p){
+    p=(p%1+1)%1;
+    const n=stops.length, f=p*n, i=Math.floor(f), k=f-i;
+    const a=stops[i%n], b=stops[(i+1)%n];
+    return [a[0]+(b[0]-a[0])*k, a[1]+(b[1]-a[1])*k, a[2]+(b[2]-a[2])*k];
+  }
+
+  function frame(){
+    if(!running) return;
+    const img=ctx.createImageData(W,H);
+    const d=img.data;
+    for(let y=0;y<H;y++){
+      for(let x=0;x<W;x++){
+        // layered sine waves -> plasma value
+        const v=
+          Math.sin(x*0.18 + t)
+        + Math.sin(y*0.16 - t*0.8)
+        + Math.sin((x+y)*0.12 + t*0.6)
+        + Math.sin(Math.hypot(x-W/2,y-H/2)*0.14 - t);
+        const c=mix(v*0.12 + t*0.02);
+        const idx=(y*W+x)*4;
+        // darkened toward the void base so text stays readable
+        d[idx]  =c[0]*0.42;
+        d[idx+1]=c[1]*0.42;
+        d[idx+2]=c[2]*0.46;
+        d[idx+3]=255;
+      }
+    }
+    ctx.putImageData(img,0,0);
+    t+=0.025;
+    raf=requestAnimationFrame(frame);
+  }
+  frame();
+
+  // expose pause/resume so screen switches can stop the canvas
+  window.__plasma={
+    pause(){ running=false; if(raf)cancelAnimationFrame(raf); cv.style.display='none'; },
+    resume(){ if(!running){running=true; cv.style.display='block'; frame();} }
+  };
+})();
+</script>
+
+<!-- config: paste Firebase keys here later -->
+<script src="config.js"></script>
+<!-- app logic (unchanged, tested) -->
+<script type="module" src="app.js"></script>
+</body>
+</html>
