@@ -576,22 +576,22 @@ function updateLangPill(){
 }
 function openLangSheet(){
   $('langSwitchSelect').value = me.lang;
-  const sheet = $('langSheet');
-  sheet.hidden = false;
-  sheet.style.display = "flex";   // explicit — overrides any inherited rule
+  const d = $('langDialog');
+  if(d.showModal) d.showModal();
+  else d.setAttribute('open','');   // ancient-browser fallback
   if(window.__plasma) window.__plasma.pause();
 }
 function closeLangSheet(){
-  const sheet = $('langSheet');
-  sheet.hidden = true;
-  sheet.style.display = "none";
+  const d = $('langDialog');
+  if(d.close) d.close();
+  else d.removeAttribute('open');
 }
 
 $('myLangPill').addEventListener('click', openLangSheet);
-$('sheetClose').addEventListener('click', closeLangSheet);
-$('langSheet').addEventListener('click', e=>{
-  // tap on the dim backdrop (not the card) closes it
-  if(e.target === $('langSheet')) closeLangSheet();
+$('dialogClose').addEventListener('click', closeLangSheet);
+// tap on the backdrop closes the dialog
+$('langDialog').addEventListener('click', e=>{
+  if(e.target === $('langDialog')) closeLangSheet();
 });
 $('langSwitchApply').addEventListener('click', ()=>{
   const newLang = $('langSwitchSelect').value;
