@@ -31,11 +31,12 @@
     --tap:50px;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-  html,body{height:100%;}
+  html,body{height:100%;width:100%;overflow-x:hidden;}
   body{
     background:var(--void);color:var(--text);
     font-family:'Space Grotesk',sans-serif;font-size:16px;line-height:1.5;
-    -webkit-text-size-adjust:100%;overflow:hidden;
+    -webkit-text-size-adjust:100%;overflow-y:hidden;overflow-x:hidden;
+    max-width:100vw;
     display:flex;flex-direction:column;
     padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
   }
@@ -67,14 +68,14 @@
   .orb.c{width:190px;height:190px;background:#f4eefb;opacity:.32;
     animation:float3 27s ease-in-out infinite;}   /* flag white */
   @keyframes float1{
-    0%,100%{transform:translate(-10vw,-6vh);}
-    50%{transform:translate(40vw,30vh);}}
+    0%,100%{transform:translate(5vw,8vh);}
+    50%{transform:translate(35vw,28vh);}}
   @keyframes float2{
-    0%,100%{transform:translate(70vw,10vh);}
-    50%{transform:translate(20vw,60vh);}}
+    0%,100%{transform:translate(55vw,12vh);}
+    50%{transform:translate(20vw,55vh);}}
   @keyframes float3{
-    0%,100%{transform:translate(30vw,80vh);}
-    50%{transform:translate(75vw,35vh);}}
+    0%,100%{transform:translate(28vw,65vh);}
+    50%{transform:translate(58vw,30vh);}}
 
   /* ============================================================
      SCREENS
