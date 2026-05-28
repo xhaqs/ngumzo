@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ngumzo voice diagnostic</title>
+<style>
+body{background:#0a0612;color:#f3eefb;font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+  padding:18px;margin:0;font-size:14px;line-height:1.5;}
+h1{font-size:18px;color:#ffc14d;}
+button{margin:6px 4px 6px 0;padding:10px 14px;background:#a06bff;color:#fff;border:none;
+  border-radius:8px;font:inherit;cursor:pointer;}
+pre{background:#15101f;padding:12px;border-radius:8px;
+  white-space:pre-wrap;word-break:break-all;font-size:12px;line-height:1.5;}
+.row{padding:8px 0;border-bottom:1px solid #2a2540;}
+.row button{margin:0 0 0 8px;padding:4px 10px;font-size:11px;}
+</style>
+</head>
+<body>
+<h1>Ngumzo · Voice Diagnostic</h1>
+
+<h2 style="font-size:13px;margin-top:18px;">1. Does this browser have speech?</h2>
+<pre id="cap"></pre>
+
+<h2 style="font-size:13px;margin-top:18px;">2. Voices available</h2>
+<button id="refresh">Refresh list</button>
+<div id="count"></div>
+<div id="out"></div>
+
+<h2 style="font-size:13px;margin-top:18px;">3. Try Arabic directly</h2>
+<button id="rawTest">A) Speak Arabic by lang only</button>
+<button id="pickedTest">B) Speak Arabic with explicit voice pick</button>
+<pre id="log"></pre>
+
+<script>
+// every step wrapped — never crash, just report
+function log(msg){
+  document.getElementById('log').textContent += msg + "\n";
+}
+
+// step 1: capabilities
+(function(){
+  var lines = [];
+  try {
+    lines.push("'speechSynthesis' in window: " + ('speechSynthesis' in window));
+    lines.push("typeof window.speechSynthesis: " + (typeof window.speechSynthesis));
+    if (window.speechSynthesis) {
+      lines.push("typeof speechSynthesis.speak: " + typeof window.speechSynthesis.speak);
+      lines.push("typeof speechSynthesis.getVoices: " + typeof window.speechSynthesis.getVoices);
+    }
+    lines.push("typeof SpeechSynthesisUtterance: " + typeof SpeechSynthesisUtterance);
+    lines.push("userAgent: " + navigator.userAgent);
+  } catch (e) {
+    lines.push("ERROR in capability check: " + e.message);
+  }
+  document.getElementById('cap').textContent = lines.join("\n");
+})();
+
+// step 2: voices
+function safeGetVoices(){
+  try {
+    if (!window.speechSynthesis) return [];
+    if (typeof window.speechSynthesis.getVoices !== 'function') return [];
+    return window.speechSynthesis.getVoices() || [];
+  } catch (e) { return []; }
+}
+
+function render(){
+  var list = safeGetVoices();
+  document.getElementById('count').textContent = 'Found ' + list.length + ' voice(s).';
+  var out = document.getElementById('out');
+  out.innerHTML = '';
+  list.forEach(function(v){
+    var row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<b>' + v.lang + '</b> &middot; ' + v.name +
+      (v.localService ? ' · <i>local</i>' : ' · <i>online</i>');
+    var btn = document.createElement('button');
+    btn.textContent = 'test';
+    btn.onclick = function(){
+      try {
+        var u = new SpeechSynthesisUtterance('Hello. مرحبا. 你好.');
+        u.voice = v;
+        u.lang = v.lang;
+        speechSynthesis.cancel();
+        speechSynthesis.speak(u);
+        log("spoke with voice: " + v.name + " (" + v.lang + ")");
+      } catch (e) { log("test failed: " + e.message); }
+    };
+    row.appendChild(btn);
+    out.appendChild(row);
+  });
+}
+try { render(); } catch (e) { log("render error: " + e.message); }
+try {
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = render;
+  }
+} catch (e) {}
+document.getElementById('refresh').onclick = render;
+
+document.getElementById('rawTest').onclick = function(){
+  try {
+    if (!window.speechSynthesis) { log("A) no speechSynthesis object"); return; }
+    var u = new SpeechSynthesisUtterance('مرحبا، هذا اختبار.');
+    u.lang = 'ar-SA';
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+    log("A) spoke with lang='ar-SA', no voice set. Did you hear it?");
+  } catch (e) { log("A) FAILED: " + e.message); }
+};
+document.getElementById('pickedTest').onclick = function(){
+  try {
+    var all = safeGetVoices();
+    var v = null;
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].lang && all[i].lang.toLowerCase().indexOf('ar') === 0) { v = all[i]; break; }
+    }
+    if (!v) { log("B) NO Arabic voice on this device. Total voices: " + all.length); return; }
+    var u = new SpeechSynthesisUtterance('مرحبا، هذا اختبار.');
+    u.voice = v;
+    u.lang = v.lang;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+    log("B) spoke with voice: " + v.name + " (" + v.lang + ")");
+  } catch (e) { log("B) FAILED: " + e.message); }
+};
+</script>
+</body>
+</html>
