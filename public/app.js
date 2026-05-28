@@ -372,6 +372,14 @@ async function enterRoom(){
   connectRelay();
   show('chatScreen');
   $('msgInput').focus();
+
+  // one-time discoverability hint for the long-press menu
+  if(!localStorage.getItem('ngumzo_lphint')){
+    setTimeout(()=>{
+      toast("Tip: long-press a message to copy or share");
+      localStorage.setItem('ngumzo_lphint','1');
+    }, 2500);
+  }
 }
 
 /* ============================================================
@@ -536,8 +544,120 @@ function renderBubble({mine,name,country,original,shown,fromLang,ts}){
     wrap.appendChild(speakBtn);
   }
 
+  // long-press on the bubble opens copy/share actions
+  attachLongPress(wrap.querySelector('.bubble'), ()=>{
+    openMessageActions({ shown, original, name, mine });
+  });
+
   box.appendChild(wrap);
   box.scrollTop = box.scrollHeight;
+}
+
+/* ============================================================
+   LONG-PRESS  — touch + mouse, ~500ms hold, cancels on move
+   ============================================================ */
+function attachLongPress(el, handler){
+  if(!el) return;
+  const HOLD = 500;
+  let timer = null;
+  let startX = 0, startY = 0;
+
+  const start = (x,y)=>{
+    startX = x; startY = y;
+    timer = setTimeout(()=>{
+      timer = null;
+      if(navigator.vibrate) try{ navigator.vibrate(15); }catch(e){}
+      handler();
+    }, HOLD);
+  };
+  const cancel = ()=>{
+    if(timer){ clearTimeout(timer); timer = null; }
+  };
+  const moveCheck = (x,y)=>{
+    if(!timer) return;
+    if(Math.abs(x-startX) > 10 || Math.abs(y-startY) > 10) cancel();
+  };
+
+  el.addEventListener('touchstart', e=>{
+    const t = e.touches[0]; start(t.clientX, t.clientY);
+  }, {passive:true});
+  el.addEventListener('touchmove', e=>{
+    const t = e.touches[0]; moveCheck(t.clientX, t.clientY);
+  }, {passive:true});
+  el.addEventListener('touchend',    cancel);
+  el.addEventListener('touchcancel', cancel);
+
+  el.addEventListener('mousedown', e=> start(e.clientX, e.clientY));
+  el.addEventListener('mousemove', e=> moveCheck(e.clientX, e.clientY));
+  el.addEventListener('mouseup',    cancel);
+  el.addEventListener('mouseleave', cancel);
+
+  // prevent the long-press selection menu from interfering
+  el.style.webkitUserSelect = 'none';
+  el.style.userSelect = 'none';
+}
+
+/* ============================================================
+   MESSAGE ACTIONS  — copy / share via native dialog
+   ============================================================ */
+let actionsState = null;
+function openMessageActions({shown, original, name, mine}){
+  actionsState = { shown, original, name, mine };
+  // show or hide the "original" copy line depending on whether there is one
+  const hasOriginal = original && original !== shown;
+  $('actCopyOriginal').style.display = hasOriginal ? "" : "none";
+  const d = $('msgActionsDialog');
+  if(d.showModal) d.showModal();
+  else d.setAttribute('open','');
+}
+function closeMessageActions(){
+  const d = $('msgActionsDialog');
+  if(d.close) d.close(); else d.removeAttribute('open');
+  actionsState = null;
+}
+async function copyToClipboard(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    toast("Copied");
+  }catch(e){
+    toast("Copy failed");
+  }
+}
+async function shareText(text){
+  if(navigator.share){
+    try{ await navigator.share({ text }); return; }catch(e){ /* cancelled */ }
+  }
+  // fallback: copy
+  await copyToClipboard(text);
+  toast("Share not available — copied instead");
+}
+
+document.addEventListener('DOMContentLoaded', wireMessageActions);
+// also wire immediately in case DOM is already ready (it usually is at script run)
+wireMessageActions();
+function wireMessageActions(){
+  const closeBtn = $('actClose');
+  if(!closeBtn || closeBtn.__wired) return;
+  closeBtn.__wired = true;
+  closeBtn.addEventListener('click', closeMessageActions);
+  $('actCopy').addEventListener('click', ()=>{
+    if(actionsState) copyToClipboard(actionsState.shown);
+    closeMessageActions();
+  });
+  $('actCopyOriginal').addEventListener('click', ()=>{
+    if(actionsState) copyToClipboard(actionsState.original);
+    closeMessageActions();
+  });
+  $('actShare').addEventListener('click', ()=>{
+    if(actionsState){
+      const prefix = actionsState.name ? actionsState.name + ": " : "";
+      shareText(prefix + actionsState.shown);
+    }
+    closeMessageActions();
+  });
+  $('msgActionsDialog').addEventListener('click', e=>{
+    if(e.target === $('msgActionsDialog')) closeMessageActions();
+  });
 }
 function addSystemLine(text){
   const box = $('messages');
@@ -702,8 +822,39 @@ function stopRecording(){
    VOICE OUTPUT  — speak button on incoming translated bubbles
    Uses speechSynthesis. Voice quality depends on the device's
    installed voices — beyond our control, but free and offline.
+
+   IMPORTANT: on Android, setting only `u.lang` is not enough for
+   non-Latin scripts (Arabic, Chinese, Japanese, Hindi, etc.). The
+   engine needs an explicit voice from getVoices() matching the
+   target language. We pick the best match each time.
    ============================================================ */
 let currentUtterance = null;
+let cachedVoices = [];
+
+function loadVoices(){
+  cachedVoices = window.speechSynthesis.getVoices() || [];
+}
+if('speechSynthesis' in window){
+  loadVoices();
+  // voices populate asynchronously on most browsers — re-cache when they do
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+/* find the best installed voice for a language code.
+   Tries: exact tag, then primary language match, then any voice. */
+function pickVoice(langTag){
+  if(!cachedVoices.length) loadVoices();
+  if(!cachedVoices.length) return null;
+  const tag = langTag.toLowerCase();
+  const primary = tag.split('-')[0];
+  // 1. exact match
+  let v = cachedVoices.find(v=>v.lang && v.lang.toLowerCase() === tag);
+  // 2. same primary language (e.g. "ar-EG" voice for "ar-SA" tag)
+  if(!v) v = cachedVoices.find(v=>v.lang && v.lang.toLowerCase().startsWith(primary+'-'));
+  // 3. primary code alone
+  if(!v) v = cachedVoices.find(v=>v.lang && v.lang.toLowerCase() === primary);
+  return v || null;
+}
 
 function speakText(text, langCode, btn){
   if(!('speechSynthesis' in window)){
@@ -714,12 +865,25 @@ function speakText(text, langCode, btn){
   if(currentUtterance && btn !== currentUtterance.__btn){
     if(currentUtterance.__btn) currentUtterance.__btn.classList.remove('playing');
   }
+
+  const tag = speechTagFor(langCode);
+  const voice = pickVoice(tag);
+
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = speechTagFor(langCode);
+  u.lang = tag;
+  if(voice) u.voice = voice;   // <-- the missing piece for Arabic/Chinese/Japanese
   u.rate = 1.0;
   u.__btn = btn;
   u.onend = ()=>{ if(btn) btn.classList.remove('playing'); currentUtterance = null; };
-  u.onerror = ()=>{ if(btn) btn.classList.remove('playing'); currentUtterance = null; };
+  u.onerror = (ev)=>{
+    if(btn) btn.classList.remove('playing');
+    currentUtterance = null;
+    if(!voice){
+      // no installed voice for this language — be honest
+      toast("No voice installed on this device for " +
+            (LANGS.find(l=>l.code===langCode)||{english:langCode}).english);
+    }
+  };
   currentUtterance = u;
   if(btn) btn.classList.add('playing');
   window.speechSynthesis.speak(u);

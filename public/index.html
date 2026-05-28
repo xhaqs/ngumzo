@@ -291,6 +291,21 @@
   }
   dialog.lang-dialog .pickernote{margin-bottom:10px;}
   dialog.lang-dialog select{margin-bottom:14px;}
+  /* message-actions list */
+  .action-list{display:flex;flex-direction:column;gap:8px;}
+  .action-row{
+    display:flex;align-items:center;gap:14px;
+    width:100%;min-height:var(--tap);
+    padding:12px 14px;border-radius:12px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid var(--glass-line);
+    color:var(--text);font:inherit;font-size:14.5px;text-align:left;
+    cursor:pointer;transition:.14s;
+  }
+  .action-row:active{background:rgba(255,255,255,0.10);}
+  .action-row .action-ico{
+    font-size:17px;color:var(--c3);flex:none;width:22px;text-align:center;
+  }
 
   .messages{
     flex:1;overflow-y:auto;padding:18px 13px 10px;
@@ -576,6 +591,28 @@
     language. Past messages stay as they were.</p>
   <select id="langSwitchSelect"></select>
   <button class="btn" id="langSwitchApply" type="button">Switch</button>
+</dialog>
+
+<!-- message-actions dialog — copy / share a chat message -->
+<dialog id="msgActionsDialog" class="lang-dialog">
+  <div class="dialog-head">
+    <span>Message</span>
+    <button class="icon-btn" id="actClose" type="button" aria-label="Close">&times;</button>
+  </div>
+  <div class="action-list">
+    <button class="action-row" id="actCopy" type="button">
+      <span class="action-ico">⧉</span>
+      <span>Copy translated text</span>
+    </button>
+    <button class="action-row" id="actCopyOriginal" type="button">
+      <span class="action-ico">⧉</span>
+      <span>Copy original</span>
+    </button>
+    <button class="action-row" id="actShare" type="button">
+      <span class="action-ico">↗</span>
+      <span>Share to another app</span>
+    </button>
+  </div>
 </dialog>
 
 <!-- config: paste Firebase keys here later -->
