@@ -531,8 +531,8 @@ function renderBubble({mine,name,country,original,shown,fromLang,ts}){
       ? `<div class="original">“${escapeHtml(original)}”</div>` : ``) +
     `<div class="meta">${nameLine} · ${time}</div>`;
 
-  // speak button on INCOMING bubbles — read the translation aloud in MY language
-  if(!mine && 'speechSynthesis' in window){
+  // speak button on INCOMING bubbles — server TTS means this works on any device
+  if(!mine){
     const speakBtn = document.createElement('button');
     speakBtn.className = 'speak-btn';
     speakBtn.type = 'button';
@@ -831,13 +831,25 @@ function stopRecording(){
 let currentUtterance = null;
 let cachedVoices = [];
 
-function loadVoices(){
-  cachedVoices = window.speechSynthesis.getVoices() || [];
+/* a phone may have window.speechSynthesis declared but undefined.
+   This helper returns it only if it's a real, callable object. */
+function getSpeech(){
+  try{
+    const s = window.speechSynthesis;
+    if(s && typeof s.speak === "function") return s;
+  }catch(e){}
+  return null;
 }
-if('speechSynthesis' in window){
+
+function loadVoices(){
+  const s = getSpeech();
+  if(!s){ cachedVoices = []; return; }
+  try{ cachedVoices = s.getVoices() || []; }catch(e){ cachedVoices = []; }
+}
+const __speech = getSpeech();
+if(__speech){
   loadVoices();
-  // voices populate asynchronously on most browsers — re-cache when they do
-  window.speechSynthesis.onvoiceschanged = loadVoices;
+  try{ __speech.onvoiceschanged = loadVoices; }catch(e){}
 }
 
 /* find the best installed voice for a language code.
@@ -847,46 +859,62 @@ function pickVoice(langTag){
   if(!cachedVoices.length) return null;
   const tag = langTag.toLowerCase();
   const primary = tag.split('-')[0];
-  // 1. exact match
   let v = cachedVoices.find(v=>v.lang && v.lang.toLowerCase() === tag);
-  // 2. same primary language (e.g. "ar-EG" voice for "ar-SA" tag)
   if(!v) v = cachedVoices.find(v=>v.lang && v.lang.toLowerCase().startsWith(primary+'-'));
-  // 3. primary code alone
   if(!v) v = cachedVoices.find(v=>v.lang && v.lang.toLowerCase() === primary);
   return v || null;
 }
 
 function speakText(text, langCode, btn){
-  if(!('speechSynthesis' in window)){
-    toast("Speak-aloud not supported on this browser"); return;
-  }
-  // stop anything already playing (avoids overlap)
-  window.speechSynthesis.cancel();
-  if(currentUtterance && btn !== currentUtterance.__btn){
-    if(currentUtterance.__btn) currentUtterance.__btn.classList.remove('playing');
-  }
-
   const tag = speechTagFor(langCode);
-  const voice = pickVoice(tag);
+  const localVoice = pickVoice(tag);
 
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = tag;
-  if(voice) u.voice = voice;   // <-- the missing piece for Arabic/Chinese/Japanese
-  u.rate = 1.0;
-  u.__btn = btn;
-  u.onend = ()=>{ if(btn) btn.classList.remove('playing'); currentUtterance = null; };
-  u.onerror = (ev)=>{
-    if(btn) btn.classList.remove('playing');
-    currentUtterance = null;
-    if(!voice){
-      // no installed voice for this language — be honest
-      toast("No voice installed on this device for " +
-            (LANGS.find(l=>l.code===langCode)||{english:langCode}).english);
-    }
-  };
-  currentUtterance = u;
+  // 1. if the device HAS a local voice for this language, use it (instant, free)
+  const s = getSpeech();
+  if(s && localVoice){
+    try{ s.cancel(); }catch(e){}
+    if(currentUtterance && currentUtterance.__btn && currentUtterance.__btn!==btn)
+      currentUtterance.__btn.classList.remove('playing');
+    let u;
+    try{ u = new SpeechSynthesisUtterance(text); }
+    catch(e){ playServerTTS(text, langCode, btn); return; }
+    u.lang = tag; u.voice = localVoice; u.rate = 1.0; u.__btn = btn;
+    u.onend = ()=>{ if(btn) btn.classList.remove('playing'); currentUtterance=null; };
+    u.onerror = ()=>{ if(btn) btn.classList.remove('playing'); currentUtterance=null;
+      playServerTTS(text, langCode, btn); };   // local failed -> try server
+    currentUtterance = u;
+    if(btn) btn.classList.add('playing');
+    try{ s.speak(u); }catch(e){ playServerTTS(text, langCode, btn); }
+    return;
+  }
+
+  // 2. no local voice (e.g. Arabic/Chinese on a cheap phone) -> server TTS
+  playServerTTS(text, langCode, btn);
+}
+
+/* server-side TTS: fetch spoken audio and play it. Works on any device. */
+let currentAudio = null;
+function playServerTTS(text, langCode, btn){
+  try{ if(currentAudio){ currentAudio.pause(); currentAudio = null; } }catch(e){}
   if(btn) btn.classList.add('playing');
-  window.speechSynthesis.speak(u);
+  const url = "/api/tts";
+  fetch(url, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ text, lang: speechTagFor(langCode) })
+  })
+  .then(r=>{ if(!r.ok) throw new Error("tts "+r.status); return r.blob(); })
+  .then(blob=>{
+    const a = new Audio(URL.createObjectURL(blob));
+    currentAudio = a;
+    a.onended = ()=>{ if(btn) btn.classList.remove('playing'); };
+    a.onerror = ()=>{ if(btn) btn.classList.remove('playing'); toast("Could not play audio"); };
+    return a.play();
+  })
+  .catch(()=>{
+    if(btn) btn.classList.remove('playing');
+    toast("Voice unavailable right now");
+  });
 }
 
 /* ============================================================
