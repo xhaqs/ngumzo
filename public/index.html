@@ -503,6 +503,14 @@
       <div class="presence waiting" id="presence">connecting…</div>
     </div>
     <button class="lang-pill" id="myLangPill" type="button" aria-label="Switch language">—</button>
+<select id="ngumzoDialect" onchange="setMyDialect(this.value)" title="Arabic Dialect" style="background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.2);border-radius:16px;padding:4px 8px;color:#FFD700;font-size:11px;cursor:pointer;outline:none;display:none" aria-label="Arabic dialect">
+  <option value="msa">📖 MSA</option>
+  <option value="egyptian">🇪🇬 Egyptian</option>
+  <option value="levantine">🇱🇧 Levantine</option>
+  <option value="gulf">🇦🇪 Gulf</option>
+  <option value="maghrebi">🇲🇦 Maghrebi</option>
+  <option value="iraqi">🇮🇶 Iraqi</option>
+</select>
     <button class="icon-btn" id="shareBtn" aria-label="Share code">&#8682;</button>
   </div>
 

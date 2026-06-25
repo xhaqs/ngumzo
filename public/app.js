@@ -470,12 +470,19 @@ async function sendMessage(){
 
   // what we put on the wire — the ORIGINAL text + sender's language.
   // each receiver translates into their own language locally.
+  // Auto-detect Arabic dialect
+  let detectedDialect = null;
+  if(me.lang === 'ar' || me.lang.startsWith('ar')){
+    detectedDialect = detectArabicDialect(text);
+  }
+
   const payload = {
     name: me.name,
     lang: me.lang,
     country: me.country || "",
     text: text,
-    ts:   Date.now()
+    ts:   Date.now(),
+    dialect: me.dialect || detectedDialect || null,
   };
 
   // show my own message immediately (no translation — it's my language)
@@ -703,6 +710,15 @@ function updateLangPill(){
   const langName = LANGS.find(l=>l.code===me.lang).english;
   const flag = flagFor(me.country);
   $('myLangPill').textContent = (flag ? flag + " " : "") + langName;
+  // Show dialect selector for Arabic
+  const dialectSel = document.getElementById('ngumzoDialect');
+  if(dialectSel){
+    dialectSel.style.display = (code === 'ar') ? 'inline-block' : 'none';
+    if(code === 'ar'){
+      const saved = localStorage.getItem('ngumzo_my_dialect');
+      if(saved) dialectSel.value = saved;
+    }
+  }
 }
 function openLangSheet(){
   $('langSwitchSelect').value = me.lang;
@@ -942,3 +958,45 @@ fillCountries();
 // allow ?room=CODE links to prefill
 const urlRoom = new URLSearchParams(location.search).get('room');
 if(urlRoom) $('codeInput').value = urlRoom.toUpperCase();
+
+
+// ═══════════════════ NGUMZO DIALECT ENGINE ═══════════════════
+const DIALECT_MARKERS_NG = {
+  egyptian:  ['إيه','ازيك','عامل','فين','مش','دلوقتي','كده','ليه','عشان','بتاع'],
+  levantine: ['شو','كيفك','هيك','منيح','هلق','بدي','يلا','كتير','رح','عم'],
+  gulf:      ['وش','شلونك','زين','يبه','گاعد','هالحين','تبي','عاد','بس'],
+  maghrebi:  ['واش','لاباس','كيداير','مزيان','بزاف','دابا','هاد','ديال','راه','بغيت'],
+  iraqi:     ['شكو','شلونك','گلبي','ماكو','اكو','شنو','هواية','گاعد'],
+};
+
+const DIALECT_EMOJIS = {
+  egyptian:'🇪🇬', levantine:'🇱🇧', gulf:'🇦🇪',
+  maghrebi:'🇲🇦', iraqi:'🇮🇶', msa:'📖'
+};
+
+function detectArabicDialect(text){
+  if(!text||text.length<3) return null;
+  const scores = {};
+  Object.keys(DIALECT_MARKERS_NG).forEach(d=>scores[d]=0);
+  const words = text.toLowerCase().split(/\s+/);
+  words.forEach(word=>{
+    Object.entries(DIALECT_MARKERS_NG).forEach(([dialect,markers])=>{
+      if(markers.some(m=>word.includes(m)||m.includes(word))) scores[dialect]+=2;
+    });
+  });
+  let max=0, detected=null;
+  Object.entries(scores).forEach(([d,s])=>{ if(s>max){max=s;detected=d;} });
+  return detected && max>0 ? detected : null;
+}
+
+// Set user dialect preference
+function setMyDialect(dialect){
+  if(me) me.dialect = dialect;
+  localStorage.setItem('ngumzo_my_dialect', dialect);
+  const badge = document.getElementById('myDialectBadge');
+  if(badge) badge.textContent = DIALECT_EMOJIS[dialect]||'🌍';
+}
+
+// Load saved dialect
+const savedDialect = localStorage.getItem('ngumzo_my_dialect');
+if(savedDialect && me) me.dialect = savedDialect;
