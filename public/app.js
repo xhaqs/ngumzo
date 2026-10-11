@@ -1334,3 +1334,306 @@ function setMyDialect(dialect) {
 // Load saved dialect
 const savedDialect = localStorage.getItem("ngumzo_my_dialect");
 if (savedDialect && me) me.dialect = savedDialect;
+
+/* ============================================================
+   INTERPRETER MODE — one phone, two people
+   ============================================================ */
+let interpState = {
+  langA: "en",
+  langB: "sw",
+  exchanges: [], // { speaker: 'A'|'B', original, translated, ts }
+  recognizerA: null,
+  recognizerB: null,
+  isRecordingA: false,
+  isRecordingB: false,
+};
+
+// Show mode tabs on join screen
+function showModeTabs() {
+  $("modeTabs").style.display = "flex";
+}
+
+// Wire up mode tabs
+$("tabRoom") &&
+  $("tabRoom").addEventListener("click", () => {
+    $("tabRoom").classList.add("active");
+    $("tabInterpreter").classList.remove("active");
+    // stay on join screen, just mark which mode is "selected" for next action
+  });
+
+$("tabInterpreter") &&
+  $("tabInterpreter").addEventListener("click", () => {
+    $("tabInterpreter").classList.add("active");
+    $("tabRoom").classList.remove("active");
+    enterInterpreter();
+  });
+
+function enterInterpreter() {
+  // Populate language dropdowns
+  populateLangSelect($("interpLangA"));
+  populateLangSelect($("interpLangB"));
+  $("interpLangA").value = interpState.langA;
+  $("interpLangB").value = interpState.langB;
+  updateInterpLabels();
+
+  // Clear exchanges
+  interpState.exchanges = [];
+  renderInterpExchanges();
+
+  // Show interpreter screen
+  show("interpreterScreen");
+  showModeTabs();
+
+  // Check if speech recognition is available
+  if (!SpeechRec) {
+    $("micA").disabled = true;
+    $("micB").disabled = true;
+    const hint = $("interpExchanges").querySelector(".interp-hint");
+    if (hint)
+      hint.textContent = "Voice input not supported. Use text fallback.";
+  }
+}
+
+function updateInterpLabels() {
+  const langAName =
+    LANGS.find((l) => l.code === interpState.langA)?.english || "A";
+  const langBName =
+    LANGS.find((l) => l.code === interpState.langB)?.english || "B";
+  $("micALabel").textContent = langAName;
+  $("micBLabel").textContent = langBName;
+}
+
+// Language change handlers
+$("interpLangA") &&
+  $("interpLangA").addEventListener("change", (e) => {
+    interpState.langA = e.target.value;
+    updateInterpLabels();
+  });
+
+$("interpLangB") &&
+  $("interpLangB").addEventListener("change", (e) => {
+    interpState.langB = e.target.value;
+    updateInterpLabels();
+  });
+
+// Swap button
+$("swapBtn") &&
+  $("swapBtn").addEventListener("click", () => {
+    const temp = interpState.langA;
+    interpState.langA = interpState.langB;
+    interpState.langB = temp;
+    $("interpLangA").value = interpState.langA;
+    $("interpLangB").value = interpState.langB;
+    updateInterpLabels();
+  });
+
+// Mic buttons
+$("micA") &&
+  $("micA").addEventListener("click", () => {
+    if (!SpeechRec) return;
+    if (interpState.isRecordingA) {
+      stopInterpRecording("A");
+    } else {
+      startInterpRecording("A");
+    }
+  });
+
+$("micB") &&
+  $("micB").addEventListener("click", () => {
+    if (!SpeechRec) return;
+    if (interpState.isRecordingB) {
+      stopInterpRecording("B");
+    } else {
+      startInterpRecording("B");
+    }
+  });
+
+function startInterpRecording(speaker) {
+  try {
+    const lang = speaker === "A" ? interpState.langA : interpState.langB;
+    const tag = speechTagFor(lang);
+    const rec = new SpeechRec();
+    rec.lang = tag;
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+
+    rec.onresult = async (ev) => {
+      let text = "";
+      for (let i = 0; i < ev.results.length; i++) {
+        text += ev.results[i][0].transcript;
+      }
+      if (text.trim()) {
+        await handleInterpSpeech(speaker, text.trim());
+      }
+    };
+
+    rec.onerror = (ev) => {
+      stopInterpRecording(speaker);
+      if (ev.error === "not-allowed") toast("Microphone permission needed");
+      else if (ev.error === "no-speech") toast("Didn't catch anything");
+      else toast("Voice error: " + ev.error);
+    };
+
+    rec.onend = () => {
+      stopInterpRecording(speaker);
+    };
+
+    rec.start();
+
+    if (speaker === "A") {
+      interpState.recognizerA = rec;
+      interpState.isRecordingA = true;
+      $("micA").classList.add("recording");
+    } else {
+      interpState.recognizerB = rec;
+      interpState.isRecordingB = true;
+      $("micB").classList.add("recording");
+    }
+  } catch (e) {
+    toast("Could not start voice input");
+  }
+}
+
+function stopInterpRecording(speaker) {
+  if (speaker === "A") {
+    try {
+      if (interpState.recognizerA) interpState.recognizerA.stop();
+    } catch (e) {}
+    interpState.recognizerA = null;
+    interpState.isRecordingA = false;
+    $("micA").classList.remove("recording");
+  } else {
+    try {
+      if (interpState.recognizerB) interpState.recognizerB.stop();
+    } catch (e) {}
+    interpState.recognizerB = null;
+    interpState.isRecordingB = false;
+    $("micB").classList.remove("recording");
+  }
+}
+
+async function handleInterpSpeech(speaker, original) {
+  const fromLang = speaker === "A" ? interpState.langA : interpState.langB;
+  const toLang = speaker === "A" ? interpState.langB : interpState.langA;
+
+  // Translate
+  const translated = await translate(original, fromLang, toLang);
+
+  // Add to exchanges
+  interpState.exchanges.push({
+    speaker,
+    original,
+    translated,
+    fromLang,
+    toLang,
+    ts: Date.now(),
+  });
+
+  // Re-render
+  renderInterpExchanges();
+
+  // Speak the translation aloud
+  speakText(translated, toLang, null);
+}
+
+function renderInterpExchanges() {
+  const container = $("interpExchanges");
+  container.innerHTML = "";
+
+  if (interpState.exchanges.length === 0) {
+    const hint = document.createElement("div");
+    hint.className = "interp-hint";
+    hint.textContent = "Tap a mic to start translating";
+    container.appendChild(hint);
+    return;
+  }
+
+  // Show last 10 exchanges
+  const recent = interpState.exchanges.slice(-10);
+  recent.forEach((ex) => {
+    const langFromName =
+      LANGS.find((l) => l.code === ex.fromLang)?.english || ex.speaker;
+    const langToName = LANGS.find((l) => l.code === ex.toLang)?.english || "—";
+
+    const div = document.createElement("div");
+    div.className = "exchange";
+    div.innerHTML = `
+      <div class="exchange-side">
+        <div class="exchange-label">${langFromName} (Person ${ex.speaker})</div>
+        <div class="exchange-text">${escapeHtml(ex.original)}</div>
+      </div>
+      <div class="exchange-side">
+        <div class="exchange-label">${langToName} translation</div>
+        <div class="exchange-text">${escapeHtml(ex.translated)}</div>
+      </div>
+    `;
+
+    // Add replay button
+    const replayBtn = document.createElement("button");
+    replayBtn.className = "speak-btn";
+    replayBtn.type = "button";
+    replayBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
+      'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M11 5L6 9H2v6h4l5 4V5z"/>' +
+      '<path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg> replay';
+    replayBtn.addEventListener("click", () => {
+      speakText(ex.translated, ex.toLang, replayBtn);
+    });
+    div.appendChild(replayBtn);
+
+    container.appendChild(div);
+  });
+
+  // Scroll to bottom
+  container.scrollTop = container.scrollHeight;
+}
+
+// Text fallback handlers
+$("translateA") &&
+  $("translateA").addEventListener("click", async () => {
+    const text = $("textA").value.trim();
+    if (!text) return;
+    $("textA").value = "";
+    await handleInterpSpeech("A", text);
+  });
+
+$("translateB") &&
+  $("translateB").addEventListener("click", async () => {
+    const text = $("textB").value.trim();
+    if (!text) return;
+    $("textB").value = "";
+    await handleInterpSpeech("B", text);
+  });
+
+// Enter key on text inputs
+$("textA") &&
+  $("textA").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      $("translateA").click();
+    }
+  });
+
+$("textB") &&
+  $("textB").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      $("translateB").click();
+    }
+  });
+
+// Back button
+$("interpBack") &&
+  $("interpBack").addEventListener("click", () => {
+    // Stop any active recording
+    stopInterpRecording("A");
+    stopInterpRecording("B");
+    // Return to join screen
+    show("joinScreen");
+    showModeTabs();
+  });
+
+// Show mode tabs on load
+showModeTabs();
