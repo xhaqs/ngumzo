@@ -1153,35 +1153,27 @@
       }
       .translate-btn {
         flex: none;
-        min-width: 62px;
         height: 42px;
-        border-radius: 12px;
-        border: 1px solid var(--glass-line);
-        background: rgba(255, 255, 255, 0.06);
-        color: var(--text);
+        border-radius: 999px;
+        border: none;
+        background: linear-gradient(135deg, var(--c2), var(--c1));
+        color: #fff;
         cursor: pointer;
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 2px;
-        padding: 4px 6px;
+        padding: 0 16px;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        box-shadow: 0 4px 14px rgba(160, 107, 255, 0.35);
         transition: 0.16s;
       }
-      .translate-arrow {
-        font-size: 16px;
-        line-height: 1;
-      }
-      .translate-label {
-        font-size: 9px;
-        font-weight: 600;
-        letter-spacing: 0.03em;
-        line-height: 1;
-        text-transform: uppercase;
-      }
       .translate-btn:active {
-        transform: scale(0.92);
-        background: rgba(255, 255, 255, 0.12);
+        transform: scale(0.94);
+        box-shadow: 0 2px 8px rgba(160, 107, 255, 0.35);
       }
 
       .interp-back {
@@ -1401,9 +1393,12 @@
           </button>
           <div class="text-fallback" id="fallbackA">
             <input id="textA" placeholder="Type here…" autocomplete="off" />
-            <button class="translate-btn" id="translateA" type="button">
-              <span class="translate-arrow">→</span>
-              <span class="translate-label">Translate</span>
+            <button
+              class="translate-btn translate-right"
+              id="translateA"
+              type="button"
+            >
+              Translate →
             </button>
           </div>
         </div>
@@ -1427,9 +1422,12 @@
           </button>
           <div class="text-fallback" id="fallbackB">
             <input id="textB" placeholder="Type here…" autocomplete="off" />
-            <button class="translate-btn" id="translateB" type="button">
-              <span class="translate-arrow">→</span>
-              <span class="translate-label">Translate</span>
+            <button
+              class="translate-btn translate-left"
+              id="translateB"
+              type="button"
+            >
+              ← Translate
             </button>
           </div>
         </div>
