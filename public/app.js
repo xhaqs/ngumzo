@@ -1147,7 +1147,7 @@ function speakText(text, langCode, btn) {
   playServerTTS(text, langCode, btn);
 }
 
-/* server-side TTS: fetch spoken audio and play it. Works on any device. */
+/* server-side TTS: fetch spoken audio and play it. Falls back to device voice if server fails. */
 let currentAudio = null;
 function playServerTTS(text, langCode, btn) {
   try {
@@ -1180,8 +1180,43 @@ function playServerTTS(text, langCode, btn) {
       return a.play();
     })
     .catch(() => {
-      if (btn) btn.classList.remove("playing");
-      toast("Voice unavailable right now");
+      // Server TTS failed - try device voice as fallback
+      const tag = speechTagFor(langCode);
+      const s = getSpeech();
+      const localVoice = pickVoice(tag);
+
+      if (s && localVoice) {
+        try {
+          s.cancel();
+        } catch (e) {}
+        let u;
+        try {
+          u = new SpeechSynthesisUtterance(text);
+        } catch (e) {
+          if (btn) btn.classList.remove("playing");
+          toast("Voice unavailable on this device");
+          return;
+        }
+        u.lang = tag;
+        u.voice = localVoice;
+        u.rate = 1.0;
+        u.onend = () => {
+          if (btn) btn.classList.remove("playing");
+        };
+        u.onerror = () => {
+          if (btn) btn.classList.remove("playing");
+          toast("Voice unavailable on this device");
+        };
+        try {
+          s.speak(u);
+        } catch (e) {
+          if (btn) btn.classList.remove("playing");
+          toast("Voice unavailable on this device");
+        }
+      } else {
+        if (btn) btn.classList.remove("playing");
+        toast("Voice unavailable on this device");
+      }
     });
 }
 
