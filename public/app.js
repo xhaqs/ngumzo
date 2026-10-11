@@ -1549,9 +1549,23 @@ function renderInterpExchanges() {
     return;
   }
 
+  // Add "Clear all" button
+  const clearAllDiv = document.createElement("div");
+  clearAllDiv.className = "exchange-clear-all";
+  const clearAllBtn = document.createElement("button");
+  clearAllBtn.className = "clear-all-btn";
+  clearAllBtn.type = "button";
+  clearAllBtn.textContent = "Clear all";
+  clearAllBtn.addEventListener("click", () => {
+    interpState.exchanges = [];
+    renderInterpExchanges();
+  });
+  clearAllDiv.appendChild(clearAllBtn);
+  container.appendChild(clearAllDiv);
+
   // Show last 10 exchanges
   const recent = interpState.exchanges.slice(-10);
-  recent.forEach((ex) => {
+  recent.forEach((ex, idx) => {
     const langFromName =
       LANGS.find((l) => l.code === ex.fromLang)?.english || ex.speaker;
     const langToName = LANGS.find((l) => l.code === ex.toLang)?.english || "—";
@@ -1569,20 +1583,101 @@ function renderInterpExchanges() {
       </div>
     `;
 
-    // Add replay button
+    // Create button container
+    const btnContainer = document.createElement("div");
+    btnContainer.className = "exchange-actions";
+
+    // Replay button
     const replayBtn = document.createElement("button");
-    replayBtn.className = "speak-btn";
+    replayBtn.className = "exchange-action-btn";
     replayBtn.type = "button";
+    replayBtn.title = "Replay translation";
+    replayBtn.setAttribute("aria-label", "Replay translation");
     replayBtn.innerHTML =
-      '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" ' +
       'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
       '<path d="M11 5L6 9H2v6h4l5 4V5z"/>' +
-      '<path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg> replay';
+      '<path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>';
     replayBtn.addEventListener("click", () => {
       speakText(ex.translated, ex.toLang, replayBtn);
     });
-    div.appendChild(replayBtn);
 
+    // Copy button
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "exchange-action-btn";
+    copyBtn.type = "button";
+    copyBtn.title = "Copy original and translation";
+    copyBtn.setAttribute("aria-label", "Copy original and translation");
+    copyBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" ' +
+      'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>' +
+      '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    copyBtn.addEventListener("click", async () => {
+      const text = `${langFromName}: ${ex.original}\n${langToName}: ${ex.translated}`;
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("Copied");
+      } catch (e) {
+        toast("Copy failed");
+      }
+    });
+
+    // Share button
+    const shareBtn = document.createElement("button");
+    shareBtn.className = "exchange-action-btn";
+    shareBtn.type = "button";
+    shareBtn.title = "Share";
+    shareBtn.setAttribute("aria-label", "Share");
+    shareBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" ' +
+      'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>' +
+      '<line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>' +
+      '<line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
+    shareBtn.addEventListener("click", async () => {
+      const text = `${langFromName}: ${ex.original}\n${langToName}: ${ex.translated}`;
+      if (navigator.share) {
+        try {
+          await navigator.share({ text });
+          return;
+        } catch (e) {
+          /* user cancelled */
+        }
+      }
+      // Fallback to copy
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("Copied");
+      } catch (e) {
+        toast("Share not available");
+      }
+    });
+
+    // Delete button
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "exchange-action-btn";
+    deleteBtn.type = "button";
+    deleteBtn.title = "Delete";
+    deleteBtn.setAttribute("aria-label", "Delete");
+    deleteBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" ' +
+      'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<polyline points="3 6 5 6 21 6"/>' +
+      '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+    deleteBtn.addEventListener("click", () => {
+      // Find the actual index in the full array
+      const actualIdx = interpState.exchanges.length - recent.length + idx;
+      interpState.exchanges.splice(actualIdx, 1);
+      renderInterpExchanges();
+    });
+
+    btnContainer.appendChild(replayBtn);
+    btnContainer.appendChild(copyBtn);
+    btnContainer.appendChild(shareBtn);
+    btnContainer.appendChild(deleteBtn);
+
+    div.appendChild(btnContainer);
     container.appendChild(div);
   });
 

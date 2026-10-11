@@ -1089,6 +1089,53 @@
         color: var(--text-dim);
         font-style: italic;
       }
+      .exchange-clear-all {
+        text-align: right;
+        margin-bottom: 8px;
+      }
+      .clear-all-btn {
+        background: transparent;
+        border: none;
+        color: var(--c3);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 6px 10px;
+        border-radius: 6px;
+        transition: 0.14s;
+      }
+      .clear-all-btn:active {
+        background: rgba(63, 216, 255, 0.1);
+        transform: scale(0.96);
+      }
+      .exchange-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .exchange-action-btn {
+        flex: none;
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid var(--glass-line);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text-dim);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: 0.14s;
+      }
+      .exchange-action-btn:hover,
+      .exchange-action-btn:active {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text);
+        transform: scale(0.94);
+      }
 
       .interp-input {
         display: flex;
