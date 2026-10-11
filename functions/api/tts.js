@@ -30,22 +30,37 @@ export default async function handler(req, res) {
     }
     // Google TTS endpoint caps around 200 chars; trim to be safe.
     const clip = text.slice(0, 200);
-    const tl = (lang || "en").split("-")[0];   // primary language code
+    const tl = (lang || "en").split("-")[0]; // primary language code
 
-    const url = "https://translate.google.com/translate_tts"
-      + "?ie=UTF-8"
-      + "&client=tw-ob"
-      + "&tl=" + encodeURIComponent(tl)
-      + "&q="  + encodeURIComponent(clip);
+    const url =
+      "https://translate.google.com/translate_tts" +
+      "?ie=UTF-8" +
+      "&client=tw-ob" +
+      "&tl=" +
+      encodeURIComponent(tl) +
+      "&q=" +
+      encodeURIComponent(clip);
 
     const g = await fetch(url, {
       headers: {
         // Google requires a normal-looking UA for this endpoint
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile"
-      }
+        "User-Agent":
+          "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile",
+      },
     });
     if (!g.ok) {
-      res.status(502).json({ error: "tts upstream " + g.status });
+      let detail = "";
+      try {
+        const body = await g.text();
+        detail = body.slice(0, 150);
+      } catch (e) {
+        detail = "";
+      }
+      res.status(502).json({
+        error: "tts upstream " + g.status,
+        status: g.status,
+        detail: detail,
+      });
       return;
     }
     const buf = Buffer.from(await g.arrayBuffer());

@@ -55,10 +55,24 @@ export async function onRequestPost(context) {
 
     const g = await fetch(url);
     if (!g.ok) {
-      return new Response(JSON.stringify({ error: "upstream failed" }), {
-        status: 502,
-        headers: { "Content-Type": "application/json" },
-      });
+      let detail = "";
+      try {
+        const body = await g.text();
+        detail = body.slice(0, 150);
+      } catch (e) {
+        detail = "";
+      }
+      return new Response(
+        JSON.stringify({
+          error: "upstream failed",
+          status: g.status,
+          detail: detail,
+        }),
+        {
+          status: 502,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     const data = await g.json();
