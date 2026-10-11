@@ -1183,37 +1183,41 @@ function playServerTTS(text, langCode, btn) {
       // Server TTS failed - try device voice as fallback
       const tag = speechTagFor(langCode);
       const s = getSpeech();
-      const localVoice = pickVoice(tag);
 
-      if (s && localVoice) {
-        try {
-          s.cancel();
-        } catch (e) {}
-        let u;
-        try {
-          u = new SpeechSynthesisUtterance(text);
-        } catch (e) {
-          if (btn) btn.classList.remove("playing");
-          toast("Voice unavailable on this device");
-          return;
-        }
-        u.lang = tag;
-        u.voice = localVoice;
-        u.rate = 1.0;
-        u.onend = () => {
-          if (btn) btn.classList.remove("playing");
-        };
-        u.onerror = () => {
-          if (btn) btn.classList.remove("playing");
-          toast("Voice unavailable on this device");
-        };
-        try {
-          s.speak(u);
-        } catch (e) {
-          if (btn) btn.classList.remove("playing");
-          toast("Voice unavailable on this device");
-        }
-      } else {
+      if (!s) {
+        if (btn) btn.classList.remove("playing");
+        toast("Voice unavailable on this device");
+        return;
+      }
+
+      const localVoice = pickVoice(tag);
+      try {
+        s.cancel();
+      } catch (e) {}
+
+      let u;
+      try {
+        u = new SpeechSynthesisUtterance(text);
+      } catch (e) {
+        if (btn) btn.classList.remove("playing");
+        toast("Voice unavailable on this device");
+        return;
+      }
+
+      u.lang = tag;
+      if (localVoice) u.voice = localVoice;
+      u.rate = 1.0;
+      u.onend = () => {
+        if (btn) btn.classList.remove("playing");
+      };
+      u.onerror = () => {
+        if (btn) btn.classList.remove("playing");
+        toast("Voice unavailable on this device");
+      };
+
+      try {
+        s.speak(u);
+      } catch (e) {
         if (btn) btn.classList.remove("playing");
         toast("Voice unavailable on this device");
       }
