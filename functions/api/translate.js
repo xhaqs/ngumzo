@@ -45,6 +45,7 @@ export async function onRequestPost(context) {
     // Try Cloudflare Workers AI first
     let translated = "";
     let workersAIFailed = false;
+    let aiError = "";
 
     try {
       if (context.env.AI) {
@@ -54,12 +55,17 @@ export async function onRequestPost(context) {
           target_lang: to || "en",
         });
         translated = result?.translated_text || "";
-        if (!translated) workersAIFailed = true;
+        if (!translated) {
+          workersAIFailed = true;
+          aiError = "empty result";
+        }
       } else {
         workersAIFailed = true;
+        aiError = "no env.AI binding";
       }
     } catch (e) {
       workersAIFailed = true;
+      aiError = e.message || String(e);
     }
 
     // Fall back to Google if Workers AI failed or returned empty
@@ -89,6 +95,7 @@ export async function onRequestPost(context) {
             error: "upstream failed",
             status: g.status,
             detail: detail,
+            aiError: aiError,
           }),
           {
             status: 502,
