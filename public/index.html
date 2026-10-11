@@ -979,6 +979,27 @@
         font-weight: 600;
         margin: 0 0 6px;
       }
+      .lang-hint {
+        font-size: 9px;
+        font-weight: 400;
+        letter-spacing: 0.05em;
+        opacity: 0.8;
+        text-transform: none;
+      }
+      .select-wrapper {
+        position: relative;
+      }
+      .select-wrapper::after {
+        content: "▾";
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 16px;
+        color: var(--c3);
+        pointer-events: none;
+        font-weight: 700;
+      }
       .interp-select {
         width: 100%;
         min-height: 44px;
@@ -990,6 +1011,14 @@
         border-radius: 12px;
         padding: 10px 12px;
         padding-right: 36px;
+        appearance: none;
+        -webkit-appearance: none;
+        cursor: pointer;
+      }
+      .interp-select:focus {
+        outline: none;
+        border-color: var(--c2);
+        box-shadow: 0 0 0 3px rgba(160, 107, 255, 0.22);
       }
       .swap-btn {
         flex: none;
@@ -1124,18 +1153,31 @@
       }
       .translate-btn {
         flex: none;
-        width: 42px;
+        min-width: 62px;
         height: 42px;
         border-radius: 12px;
         border: 1px solid var(--glass-line);
         background: rgba(255, 255, 255, 0.06);
         color: var(--text);
         cursor: pointer;
-        font-size: 18px;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
+        gap: 2px;
+        padding: 4px 6px;
         transition: 0.16s;
+      }
+      .translate-arrow {
+        font-size: 16px;
+        line-height: 1;
+      }
+      .translate-label {
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        line-height: 1;
+        text-transform: uppercase;
       }
       .translate-btn:active {
         transform: scale(0.92);
@@ -1305,8 +1347,13 @@
       <div class="interp-controls">
         <div class="lang-row">
           <div class="lang-box">
-            <label>Person A speaks</label>
-            <select id="interpLangA" class="interp-select"></select>
+            <label
+              >Person A speaks
+              <span class="lang-hint">· Tap to choose</span></label
+            >
+            <div class="select-wrapper">
+              <select id="interpLangA" class="interp-select"></select>
+            </div>
           </div>
           <button
             class="swap-btn"
@@ -1318,8 +1365,13 @@
             ⇄
           </button>
           <div class="lang-box">
-            <label>Person B speaks</label>
-            <select id="interpLangB" class="interp-select"></select>
+            <label
+              >Person B speaks
+              <span class="lang-hint">· Tap to choose</span></label
+            >
+            <div class="select-wrapper">
+              <select id="interpLangB" class="interp-select"></select>
+            </div>
           </div>
         </div>
       </div>
@@ -1350,7 +1402,8 @@
           <div class="text-fallback" id="fallbackA">
             <input id="textA" placeholder="Type here…" autocomplete="off" />
             <button class="translate-btn" id="translateA" type="button">
-              →
+              <span class="translate-arrow">→</span>
+              <span class="translate-label">Translate</span>
             </button>
           </div>
         </div>
@@ -1375,7 +1428,8 @@
           <div class="text-fallback" id="fallbackB">
             <input id="textB" placeholder="Type here…" autocomplete="off" />
             <button class="translate-btn" id="translateB" type="button">
-              →
+              <span class="translate-arrow">→</span>
+              <span class="translate-label">Translate</span>
             </button>
           </div>
         </div>
