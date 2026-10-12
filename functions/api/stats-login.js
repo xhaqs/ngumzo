@@ -1,28 +1,25 @@
 /* ============================================================
    NGUMZO — /api/stats-login
    ------------------------------------------------------------
-   Server-side proxy to Keystone authentication.
+   Server-side proxy to live Keystone authentication.
 
-   POST { userId, password } -> forwards to Keystone /login
-   Returns { token, userId, name, role, apps, expiresAt }
+   POST { password } -> forwards to Keystone with app="ngumzo"
+   Returns { ok, token, user: { userId, name, role, apps } }
 
    Never logs passwords. Server-side only to avoid CORS issues.
    ============================================================ */
 
-// Keystone API URL - configurable via environment variable
-const KEYSTONE_URL =
-  typeof process !== "undefined" && process.env.KEYSTONE_URL
-    ? process.env.KEYSTONE_URL
-    : "https://keystone-api.riakoine.workers.dev";
+// Live Keystone URL (keystone.riakoine.com)
+const KEYSTONE_URL = "https://keystone.riakoine.com/api/keystone";
 
 export async function onRequestPost(context) {
   try {
     const body = await context.request.json();
 
-    // Validate required fields (never log passwords)
-    if (!body.userId || !body.password) {
+    // Validate required field (never log password/master phrase)
+    if (!body.password) {
       return new Response(
-        JSON.stringify({ error: "Missing userId or password" }),
+        JSON.stringify({ ok: false, error: "PASSWORD_REQUIRED" }),
         {
           status: 400,
           headers: { "Content-Type": "application/json" },
@@ -30,15 +27,15 @@ export async function onRequestPost(context) {
       );
     }
 
-    // Forward to Keystone /login
-    const response = await fetch(`${KEYSTONE_URL}/login`, {
+    // Forward to live Keystone login endpoint
+    const response = await fetch(`${KEYSTONE_URL}?action=login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        userId: body.userId,
         password: body.password,
+        app: "ngumzo",
       }),
     });
 
@@ -50,13 +47,10 @@ export async function onRequestPost(context) {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    return new Response(
-      JSON.stringify({ error: "Login failed", detail: error.message }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    return new Response(JSON.stringify({ ok: false, error: "LOGIN_FAILED" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 }
 

@@ -182,18 +182,7 @@
 
         <form id="loginForm">
           <div class="form-group">
-            <label for="userId">User ID</label>
-            <input
-              type="text"
-              id="userId"
-              name="userId"
-              required
-              autocomplete="username"
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="password">Password</label>
+            <label for="password">Master Phrase</label>
             <input
               type="password"
               id="password"
@@ -248,7 +237,6 @@
         e.preventDefault();
         hideError();
 
-        const userId = document.getElementById("userId").value;
         const password = document.getElementById("password").value;
 
         loginBtn.disabled = true;
@@ -260,21 +248,21 @@
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ userId, password }),
+            body: JSON.stringify({ password }),
           });
 
           const data = await response.json();
 
-          if (!response.ok) {
+          if (!data.ok) {
             throw new Error(data.error || "Login failed");
           }
 
           // Store token and user data in memory
           authToken = data.token;
           userData = {
-            userId: data.userId,
-            name: data.name,
-            role: data.role,
+            userId: data.user.userId,
+            name: data.user.name,
+            role: data.user.role,
           };
 
           // Clear form

@@ -29,11 +29,8 @@
 // instances retain memory. Counts here are best-effort and may reset.
 const ADMIN_KEY = process.env.NGUMZO_STATS_KEY || "phoenix-ngumzo-2026";
 
-// Keystone API URL for token verification
-const KEYSTONE_URL =
-  typeof process !== "undefined" && process.env.KEYSTONE_URL
-    ? process.env.KEYSTONE_URL
-    : "https://keystone-api.riakoine.workers.dev";
+// Live Keystone URL (keystone.riakoine.com)
+const KEYSTONE_URL = "https://keystone.riakoine.com/api/keystone";
 
 // module-level counter survives within a single warm instance
 const counts = (globalThis.__ngumzo_counts ||= {
@@ -57,18 +54,17 @@ async function verifyAdminAccess(req) {
     const token = authHeader.substring(7);
 
     try {
-      const response = await fetch(`${KEYSTONE_URL}/verify`, {
-        method: "POST",
+      const response = await fetch(`${KEYSTONE_URL}?action=verify`, {
+        method: "GET",
         headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+          "x-keystone-token": token,
         },
       });
 
       if (response.ok) {
         const data = await response.json();
-        // Only allow admin role
-        return data.role === "admin";
+        // Only allow admin role (live Keystone returns user.role)
+        return data.ok && data.user?.role === "admin";
       }
     } catch (e) {
       // Token verification failed, fall through to legacy key
