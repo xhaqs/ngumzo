@@ -257,12 +257,38 @@ async function decrypt(key, b64) {
 async function translate(text, from, to) {
   if (from === to) return text;
   try {
+    // Include tester/referral info for pilot quota system
+    const payload = { text, from, to };
+    const pilotData = getPilotData();
+    if (pilotData.tester) payload.tester = pilotData.tester;
+    if (pilotData.referrer) payload.referrer = pilotData.referrer;
+
     const r = await fetch("/api/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, from, to }),
+      body: JSON.stringify(payload),
     });
-    if (!r.ok) throw new Error("translate " + r.status);
+
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      // Handle pilot quota errors with user-friendly messages
+      if (r.status === 429) {
+        if (data.error === "daily_limit") {
+          toast("Daily limit reached — resets at midnight UTC");
+        } else if (data.error === "trial_ended") {
+          toast("Trial period ended — contact us to continue using Ngumzo");
+        } else if (data.error === "global_cap") {
+          toast(
+            "Ngumzo is at capacity today (temporary limit while we scale) — try again tomorrow",
+          );
+        } else if (data.error === "not_found") {
+          toast("Ngumzo is in private beta — get an invite link from a tester");
+        }
+        return text; // show original when quota exceeded
+      }
+      throw new Error("translate " + r.status);
+    }
+
     const data = await r.json();
     return data.translated || text;
   } catch (e) {
@@ -1242,10 +1268,61 @@ function pingStat(event) {
 pingStat("open");
 
 /* ============================================================
+   PILOT SYSTEM — tester and referral tracking
+   ============================================================ */
+function getPilotData() {
+  try {
+    const stored = localStorage.getItem("ngumzo_pilot");
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {}
+  return { tester: null, referrer: null };
+}
+
+function setPilotData(tester, referrer) {
+  try {
+    localStorage.setItem(
+      "ngumzo_pilot",
+      JSON.stringify({ tester, referrer: referrer || null }),
+    );
+  } catch (e) {}
+}
+
+function generateGuestId() {
+  return "guest-" + Math.random().toString(36).slice(2, 11);
+}
+
+function handlePilotParams() {
+  const params = new URLSearchParams(location.search);
+  const testerParam = params.get("t");
+  const referrerParam = params.get("r");
+
+  if (testerParam) {
+    // ?t=<name> — tester link
+    setPilotData(testerParam, null);
+  } else if (referrerParam) {
+    // ?r=<name> — referral link
+    const existing = getPilotData();
+    if (!existing.tester || existing.tester.startsWith("guest-")) {
+      // Generate stable guest ID if needed
+      const guestId =
+        existing.tester && existing.tester.startsWith("guest-")
+          ? existing.tester
+          : generateGuestId();
+      setPilotData(guestId, referrerParam);
+    }
+    // else: already a named tester, don't overwrite
+  }
+}
+
+/* ============================================================
    BOOT
    ============================================================ */
 fillLangs();
 fillCountries();
+handlePilotParams(); // capture ?t= or ?r= parameters
+
 // allow ?room=CODE links to prefill
 const urlRoom = new URLSearchParams(location.search).get("room");
 if (urlRoom) $("codeInput").value = urlRoom.toUpperCase();

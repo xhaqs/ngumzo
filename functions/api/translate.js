@@ -4,9 +4,9 @@
    A thin, STATELESS proxy. It exists only because browsers
    cannot call translation services directly (CORS blocks it).
 
-   What it does:  receives { text, from, to }, tries Cloudflare
-                  Workers AI first, falls back to Google if needed,
-                  returns { translated }.
+   What it does:  receives { text, from, to, tester, referrer },
+                  checks quota, tries Cloudflare Workers AI first,
+                  falls back to Google if needed, returns { translated }.
    What it does NOT do:  no database, no logging of message
                   text, no knowledge of the room code or who
                   is talking. It forwards one string and forgets.
@@ -17,11 +17,17 @@
    never the ciphertext, never the room.
    ============================================================ */
 
+import {
+  checkTesterQuota,
+  registerReferral,
+  incrementCounters,
+} from "./_pilot.js";
+
 // Cloudflare Pages Functions format
 export async function onRequestPost(context) {
   try {
     const body = await context.request.json();
-    const { text, from, to } = body || {};
+    const { text, from, to, tester, referrer } = body || {};
 
     if (!text || typeof text !== "string") {
       return new Response(JSON.stringify({ error: "missing text" }), {
@@ -40,6 +46,28 @@ export async function onRequestPost(context) {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    // ---- PILOT QUOTA CHECK ----
+    // Auto-register referrals on first use
+    if (referrer && tester && tester.startsWith("guest-")) {
+      await registerReferral(tester, referrer, context.env);
+    }
+
+    // Check quota
+    const currentDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    if (tester) {
+      const quota = await checkTesterQuota(tester, {
+        env: context.env,
+        date: currentDate,
+      });
+
+      if (!quota.allowed) {
+        return new Response(JSON.stringify({ error: quota.reason }), {
+          status: 429,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Try Cloudflare Workers AI first
@@ -106,6 +134,14 @@ export async function onRequestPost(context) {
 
       const data = await g.json();
       translated = data[0]?.map((x) => x[0]).join("") || "";
+    }
+
+    // ---- INCREMENT PILOT COUNTERS ----
+    if (tester) {
+      await incrementCounters(tester, from || "auto", to || "en", {
+        env: context.env,
+        date: currentDate,
+      });
     }
 
     return new Response(JSON.stringify({ translated }), {

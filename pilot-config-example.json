@@ -1,0 +1,26 @@
+{
+  "enabled": true,
+  "globalDailyCap": 1500,
+  "testers": {
+    "phoenix": {
+      "limit": 0,
+      "days": 0,
+      "note": "Owner account - limit: 0 means unlimited, days: 0 means no expiry"
+    },
+    "alice": {
+      "limit": 100,
+      "days": 30,
+      "startDate": "2026-10-12"
+    },
+    "bob": {
+      "limit": 100,
+      "days": 30,
+      "startDate": "2026-10-12"
+    }
+  },
+  "referralDefaults": {
+    "limit": 20,
+    "days": 14,
+    "note": "Auto-registered when someone clicks ?r=<tester> link"
+  }
+}

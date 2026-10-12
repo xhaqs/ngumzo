@@ -34,20 +34,20 @@ const counts = (globalThis.__ngumzo_counts ||= {
   opens: 0,
   rooms_created: 0,
   messages_sent: 0,
-  since: new Date().toISOString()
+  since: new Date().toISOString(),
 });
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method === "POST") {
     try {
       const { event } = req.body || {};
-      if (event === "open")          counts.opens++;
+      if (event === "open") counts.opens++;
       else if (event === "room_created") counts.rooms_created++;
       else if (event === "message_sent") counts.messages_sent++;
       // unknown events are silently ignored — no error feedback to clients
       res.status(204).end();
     } catch (e) {
-      res.status(204).end();   // never let analytics break the app
+      res.status(204).end(); // never let analytics break the app
     }
     return;
   }
@@ -55,10 +55,31 @@ export default function handler(req, res) {
   if (req.method === "GET") {
     const key = (req.query && req.query.key) || "";
     if (key !== ADMIN_KEY) {
-      res.status(404).end();   // hide the endpoint from casual snooping
+      res.status(404).end(); // hide the endpoint from casual snooping
       return;
     }
-    res.status(200).json(counts);
+
+    // Basic counts (in-memory)
+    const result = { ...counts };
+
+    // Add pilot stats if available (via edge function)
+    try {
+      const pilotStats = await fetch(
+        req.headers.host.startsWith("localhost")
+          ? "http://localhost:8788/api/_pilot-stats"
+          : `https://${req.headers.host}/api/_pilot-stats`,
+        {
+          headers: { "X-Admin-Key": ADMIN_KEY },
+        },
+      );
+      if (pilotStats.ok) {
+        result.pilot = await pilotStats.json();
+      }
+    } catch (e) {
+      // Pilot stats unavailable (expected if not deployed or no bindings)
+    }
+
+    res.status(200).json(result);
     return;
   }
 
