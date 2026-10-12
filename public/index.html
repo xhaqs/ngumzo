@@ -1048,13 +1048,26 @@
         background: rgba(255, 255, 255, 0.12);
       }
 
-      .interp-settings {
+      .interp-settings-panel {
         margin-top: 14px;
-        padding-top: 14px;
-        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 14px;
+        border-radius: 12px;
+        background: rgba(0, 0, 0, 0.32);
+        border: 1px solid var(--glass-line);
         display: flex;
         flex-direction: column;
         gap: 10px;
+        animation: slideDown 0.2s ease-out;
+      }
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
       .setting-label {
         display: block;
@@ -1231,6 +1244,85 @@
         transform: scale(0.94);
       }
 
+      /* Pending card styles */
+      .pending-card {
+        background: linear-gradient(
+          135deg,
+          rgba(255, 215, 0, 0.12),
+          rgba(255, 165, 0, 0.08)
+        );
+        border: 2px solid rgba(255, 215, 0, 0.4);
+        border-radius: 16px;
+        padding: 14px;
+        backdrop-filter: blur(8px);
+        animation: pop 0.34s cubic-bezier(0.2, 0.9, 0.25, 1.2) both;
+      }
+      .pending-label {
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 215, 0, 0.9);
+        font-weight: 700;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .pending-countdown {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--c3);
+      }
+      .pending-text {
+        font-size: 16px;
+        line-height: 1.5;
+        color: var(--text);
+        margin-bottom: 12px;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.25);
+        border-radius: 8px;
+        min-height: 48px;
+        outline: none;
+        border: 1px solid transparent;
+        cursor: text;
+      }
+      .pending-text:focus {
+        border-color: var(--c2);
+        box-shadow: 0 0 0 2px rgba(160, 107, 255, 0.22);
+      }
+      .pending-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .pending-btn {
+        flex: 1;
+        height: 44px;
+        border-radius: 12px;
+        border: none;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: 0.14s;
+      }
+      .pending-btn.translate {
+        background: linear-gradient(135deg, var(--c2), var(--c1));
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(160, 107, 255, 0.35);
+      }
+      .pending-btn.translate:active {
+        transform: scale(0.96);
+      }
+      .pending-btn.cancel {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--glass-line);
+        color: var(--text-dim);
+      }
+      .pending-btn.cancel:active {
+        background: rgba(255, 255, 255, 0.12);
+        transform: scale(0.96);
+      }
+
       .interp-input {
         display: flex;
         gap: 10px;
@@ -1316,46 +1408,6 @@
       .translate-btn:active {
         transform: scale(0.96);
         box-shadow: 0 2px 8px rgba(160, 107, 255, 0.35);
-      }
-
-      .countdown-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        background: rgba(0, 0, 0, 0.75);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        border-radius: 12px;
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        z-index: 10;
-      }
-      .countdown-text {
-        font-size: 28px;
-        font-weight: 700;
-        color: var(--c3);
-        font-family: "Clash Display", "Space Grotesk", sans-serif;
-      }
-      .countdown-cancel {
-        padding: 8px 16px;
-        border-radius: 999px;
-        border: 1px solid var(--glass-line);
-        background: rgba(255, 255, 255, 0.1);
-        color: var(--text);
-        font: inherit;
-        font-size: 12px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: 0.14s;
-      }
-      .countdown-cancel:active {
-        background: rgba(255, 255, 255, 0.2);
-        transform: scale(0.96);
       }
 
       .interp-back {
@@ -1538,6 +1590,16 @@
           >
             ⇄
           </button>
+          <button
+            class="swap-btn"
+            id="settingsBtn"
+            type="button"
+            aria-label="Settings"
+            title="Settings"
+            style="margin-left: 4px"
+          >
+            ⚙
+          </button>
           <div class="lang-box">
             <label
               >Person B speaks
@@ -1548,17 +1610,17 @@
             </div>
           </div>
         </div>
-        <div class="interp-settings">
-          <label class="setting-label">
-            Check before translating
-            <span class="lang-hint">· Mic only</span>
-          </label>
+        <!-- Settings panel (hidden by default) -->
+        <div
+          class="interp-settings-panel"
+          id="settingsPanel"
+          style="display: none"
+        >
+          <label class="setting-label">Check before translating</label>
           <select id="checkBeforeTranslate" class="interp-setting-select">
-            <option value="off">Off (instant)</option>
+            <option value="off">Off</option>
             <option value="ask">Ask me</option>
-            <option value="3">Auto after 3 sec</option>
-            <option value="5">Auto after 5 sec</option>
-            <option value="8">Auto after 8 sec</option>
+            <option value="auto">Auto (5 seconds)</option>
           </select>
           <label class="setting-checkbox">
             <input type="checkbox" id="readBackToggle" />

@@ -1346,11 +1346,12 @@ let interpState = {
   recognizerB: null,
   isRecordingA: false,
   isRecordingB: false,
-  checkBeforeTranslate: "off", // "off" | "ask" | "3" | "5" | "8"
+  checkBeforeTranslate: "off", // "off" | "ask" | "auto"
   readBackEnabled: false,
   countdownTimer: null,
   countdownSpeaker: null,
   pendingText: null,
+  pendingCard: null,
 };
 
 // Show mode tabs on join screen
@@ -1394,6 +1395,32 @@ function enterInterpreter() {
       $("readBackToggle").checked = interpState.readBackEnabled;
     }
   } catch (e) {}
+
+  // Wire up settings panel toggle
+  $("settingsBtn") &&
+    $("settingsBtn").addEventListener("click", () => {
+      const panel = $("settingsPanel");
+      if (panel.style.display === "none") {
+        panel.style.display = "flex";
+      } else {
+        panel.style.display = "none";
+      }
+    });
+
+  // Close settings panel when tapping outside
+  document.addEventListener("click", (e) => {
+    const panel = $("settingsPanel");
+    const settingsBtn = $("settingsBtn");
+    if (
+      panel &&
+      settingsBtn &&
+      panel.style.display !== "none" &&
+      !panel.contains(e.target) &&
+      !settingsBtn.contains(e.target)
+    ) {
+      panel.style.display = "none";
+    }
+  });
 
   // Wire up settings change handlers
   $("checkBeforeTranslate") &&
@@ -1553,7 +1580,6 @@ async function handleDictationEnd(speaker, text) {
   // Mic is already stopped by onend handler
   const mode = interpState.checkBeforeTranslate;
   const fromLang = speaker === "A" ? interpState.langA : interpState.langB;
-  const textInput = speaker === "A" ? $("textA") : $("textB");
 
   // Read back if enabled
   if (interpState.readBackEnabled) {
@@ -1563,15 +1589,9 @@ async function handleDictationEnd(speaker, text) {
   if (mode === "off") {
     // Instant translation (current behavior)
     await handleInterpSpeech(speaker, text);
-  } else if (mode === "ask") {
-    // Put text in box, wait for user to tap Translate
-    textInput.value = text;
-    textInput.focus();
-  } else {
-    // Auto mode: show countdown and translate at zero
-    const seconds = parseInt(mode);
-    textInput.value = text;
-    startCountdown(speaker, text, seconds);
+  } else if (mode === "ask" || mode === "auto") {
+    // Show pending card in exchange area
+    showPendingCard(speaker, text, mode === "auto");
   }
 }
 
@@ -1603,75 +1623,131 @@ async function readBackText(text, lang) {
   });
 }
 
-function startCountdown(speaker, text, seconds) {
-  const textInput = speaker === "A" ? $("textA") : $("textB");
-  const fallback = speaker === "A" ? $("fallbackA") : $("fallbackB");
+function showPendingCard(speaker, text, autoMode) {
+  // Remove any existing pending card
+  clearPendingCard();
 
-  // Clear any existing countdown
-  cancelCountdown();
+  const fromLang = speaker === "A" ? interpState.langA : interpState.langB;
+  const langName = LANGS.find((l) => l.code === fromLang)?.english || speaker;
 
-  interpState.countdownSpeaker = speaker;
-  interpState.pendingText = text;
+  const container = $("interpExchanges");
 
-  // Create countdown overlay
-  const overlay = document.createElement("div");
-  overlay.className = "countdown-overlay";
-  overlay.id = `countdown-${speaker}`;
+  // Create pending card
+  const card = document.createElement("div");
+  card.className = "pending-card";
+  card.id = "pendingCard";
 
-  const countdownText = document.createElement("div");
-  countdownText.className = "countdown-text";
-  countdownText.textContent = seconds;
+  const label = document.createElement("div");
+  label.className = "pending-label";
+  label.innerHTML = `${langName.toUpperCase()} (PERSON ${speaker})`;
 
-  const cancelBtn = document.createElement("button");
-  cancelBtn.className = "countdown-cancel";
-  cancelBtn.type = "button";
-  cancelBtn.textContent = "Cancel";
-  cancelBtn.addEventListener("click", () => {
-    cancelCountdown();
-    textInput.focus();
+  // Add countdown display if auto mode
+  if (autoMode) {
+    const countdown = document.createElement("span");
+    countdown.className = "pending-countdown";
+    countdown.id = "pendingCountdown";
+    countdown.textContent = "5";
+    label.appendChild(countdown);
+  }
+
+  const textDiv = document.createElement("div");
+  textDiv.className = "pending-text";
+  textDiv.contentEditable = "true";
+  textDiv.textContent = text;
+  textDiv.id = "pendingText";
+
+  const actions = document.createElement("div");
+  actions.className = "pending-actions";
+
+  const translateBtn = document.createElement("button");
+  translateBtn.className = "pending-btn translate";
+  translateBtn.textContent = "Translate";
+  translateBtn.type = "button";
+  translateBtn.addEventListener("click", () => {
+    const editedText = textDiv.textContent.trim();
+    if (editedText) {
+      clearPendingCard();
+      handleInterpSpeech(speaker, editedText);
+    }
   });
 
-  overlay.appendChild(countdownText);
-  overlay.appendChild(cancelBtn);
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "pending-btn cancel";
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.type = "button";
+  cancelBtn.addEventListener("click", () => {
+    clearPendingCard();
+  });
 
-  // Position overlay over the fallback area
-  fallback.style.position = "relative";
-  fallback.appendChild(overlay);
+  actions.appendChild(translateBtn);
+  actions.appendChild(cancelBtn);
 
-  let remaining = seconds;
-  interpState.countdownTimer = setInterval(() => {
-    remaining--;
-    if (remaining <= 0) {
-      cancelCountdown();
-      handleInterpSpeech(speaker, interpState.pendingText);
-      textInput.value = "";
-    } else {
-      countdownText.textContent = remaining;
+  card.appendChild(label);
+  card.appendChild(textDiv);
+  card.appendChild(actions);
+
+  container.appendChild(card);
+  container.scrollTop = container.scrollHeight;
+
+  // Store reference
+  interpState.pendingCard = card;
+  interpState.pendingText = text;
+  interpState.countdownSpeaker = speaker;
+
+  // Stop countdown if user clicks on text to edit
+  textDiv.addEventListener("focus", () => {
+    if (interpState.countdownTimer) {
+      clearInterval(interpState.countdownTimer);
+      interpState.countdownTimer = null;
+      const countdownEl = $("pendingCountdown");
+      if (countdownEl) countdownEl.remove();
     }
-  }, 1000);
+  });
 
-  // Stop countdown if user taps into the box to edit
-  const onFocus = () => {
-    cancelCountdown();
-    textInput.removeEventListener("focus", onFocus);
-  };
-  textInput.addEventListener("focus", onFocus);
+  // Start countdown if auto mode
+  if (autoMode) {
+    startPendingCountdown(speaker);
+  }
 }
 
-function cancelCountdown() {
+function clearPendingCard() {
   if (interpState.countdownTimer) {
     clearInterval(interpState.countdownTimer);
     interpState.countdownTimer = null;
   }
 
-  // Remove countdown overlays
-  const overlayA = document.getElementById("countdown-A");
-  const overlayB = document.getElementById("countdown-B");
-  if (overlayA) overlayA.remove();
-  if (overlayB) overlayB.remove();
+  const card = $("pendingCard");
+  if (card) card.remove();
 
-  interpState.countdownSpeaker = null;
+  interpState.pendingCard = null;
   interpState.pendingText = null;
+  interpState.countdownSpeaker = null;
+}
+
+function startPendingCountdown(speaker) {
+  let remaining = 5;
+  const countdownEl = $("pendingCountdown");
+
+  interpState.countdownTimer = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(interpState.countdownTimer);
+      interpState.countdownTimer = null;
+
+      const textDiv = $("pendingText");
+      const text = textDiv
+        ? textDiv.textContent.trim()
+        : interpState.pendingText;
+
+      clearPendingCard();
+
+      if (text) {
+        handleInterpSpeech(speaker, text);
+      }
+    } else {
+      if (countdownEl) countdownEl.textContent = remaining;
+    }
+  }, 1000);
 }
 
 async function handleInterpSpeech(speaker, original) {
@@ -1886,8 +1962,8 @@ $("interpBack") &&
     // Stop any active recording
     stopInterpRecording("A");
     stopInterpRecording("B");
-    // Cancel any countdown
-    cancelCountdown();
+    // Clear any pending card
+    clearPendingCard();
     // Return to join screen
     show("joinScreen");
     showModeTabs();
