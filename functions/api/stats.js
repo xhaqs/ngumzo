@@ -29,6 +29,12 @@
 // instances retain memory. Counts here are best-effort and may reset.
 const ADMIN_KEY = process.env.NGUMZO_STATS_KEY || "phoenix-ngumzo-2026";
 
+// Keystone API URL for token verification
+const KEYSTONE_URL =
+  typeof process !== "undefined" && process.env.KEYSTONE_URL
+    ? process.env.KEYSTONE_URL
+    : "https://keystone-api.riakoine.workers.dev";
+
 // module-level counter survives within a single warm instance
 const counts = (globalThis.__ngumzo_counts ||= {
   opens: 0,
@@ -36,6 +42,43 @@ const counts = (globalThis.__ngumzo_counts ||= {
   messages_sent: 0,
   since: new Date().toISOString(),
 });
+
+/**
+ * Verify admin access via Bearer token or legacy API key
+ * @param {Request|Object} req - Request object (Vercel or Cloudflare format)
+ * @returns {Promise<boolean>} - true if authorized
+ */
+async function verifyAdminAccess(req) {
+  // Try Bearer token first
+  const authHeader =
+    req.headers?.get?.("authorization") || req.headers?.authorization || "";
+
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    const token = authHeader.substring(7);
+
+    try {
+      const response = await fetch(`${KEYSTONE_URL}/verify`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Only allow admin role
+        return data.role === "admin";
+      }
+    } catch (e) {
+      // Token verification failed, fall through to legacy key
+    }
+  }
+
+  // Fall back to legacy API key
+  const key = (req.query && req.query.key) || "";
+  return key === ADMIN_KEY;
+}
 
 export default async function handler(req, res) {
   if (req.method === "POST") {
@@ -53,8 +96,9 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "GET") {
-    const key = (req.query && req.query.key) || "";
-    if (key !== ADMIN_KEY) {
+    // Verify admin access (Bearer token or legacy API key)
+    const isAuthorized = await verifyAdminAccess(req);
+    if (!isAuthorized) {
       res.status(404).end(); // hide the endpoint from casual snooping
       return;
     }

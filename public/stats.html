@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ngumzo Pilot Stats</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 480px;
+      }
+
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+        color: #1a202c;
+      }
+
+      h2 {
+        font-size: 1.1rem;
+        margin-bottom: 1rem;
+        color: #2d3748;
+        border-bottom: 2px solid #667eea;
+        padding-bottom: 0.5rem;
+      }
+
+      .subtitle {
+        color: #718096;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .form-group {
+        margin-bottom: 1rem;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.25rem;
+        color: #4a5568;
+        font-weight: 500;
+        font-size: 0.9rem;
+      }
+
+      input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 1rem;
+        transition: border-color 0.2s;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+
+      button {
+        width: 100%;
+        padding: 0.75rem;
+        background: #667eea;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: #5a67d8;
+      }
+
+      button:disabled {
+        background: #cbd5e0;
+        cursor: not-allowed;
+      }
+
+      .error {
+        background: #fed7d7;
+        color: #c53030;
+        padding: 0.75rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+      }
+
+      .stat-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .stat-row:last-child {
+        border-bottom: none;
+      }
+
+      .stat-label {
+        color: #4a5568;
+        font-weight: 500;
+      }
+
+      .stat-value {
+        color: #1a202c;
+        font-weight: 700;
+        font-size: 1.1rem;
+      }
+
+      .lang-pair {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        font-size: 0.9rem;
+      }
+
+      .referrer-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        font-size: 0.9rem;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .user-info {
+        background: #edf2f7;
+        padding: 0.75rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+        color: #2d3748;
+      }
+
+      .btn-secondary {
+        background: #e2e8f0;
+        color: #2d3748;
+      }
+
+      .btn-secondary:hover {
+        background: #cbd5e0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Login Form -->
+      <div id="loginView" class="card">
+        <h1>Ngumzo Pilot Stats</h1>
+        <p class="subtitle">Sign in to view analytics</p>
+
+        <div id="errorMessage" class="error hidden"></div>
+
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="userId">User ID</label>
+            <input
+              type="text"
+              id="userId"
+              name="userId"
+              required
+              autocomplete="username"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+              autocomplete="current-password"
+            />
+          </div>
+
+          <button type="submit" id="loginBtn">Sign In</button>
+        </form>
+      </div>
+
+      <!-- Stats View -->
+      <div id="statsView" class="hidden">
+        <div class="card">
+          <div class="user-info" id="userInfo"></div>
+          <button class="btn-secondary" id="signOutBtn">Sign Out</button>
+        </div>
+
+        <div id="statsContent"></div>
+      </div>
+    </div>
+
+    <script>
+      // Keep token in memory only (not localStorage, not URL)
+      let authToken = null;
+      let userData = null;
+
+      const loginView = document.getElementById("loginView");
+      const statsView = document.getElementById("statsView");
+      const loginForm = document.getElementById("loginForm");
+      const loginBtn = document.getElementById("loginBtn");
+      const signOutBtn = document.getElementById("signOutBtn");
+      const errorMessage = document.getElementById("errorMessage");
+      const userInfo = document.getElementById("userInfo");
+      const statsContent = document.getElementById("statsContent");
+
+      // Show error
+      function showError(message) {
+        errorMessage.textContent = message;
+        errorMessage.classList.remove("hidden");
+      }
+
+      // Hide error
+      function hideError() {
+        errorMessage.classList.add("hidden");
+      }
+
+      // Sign in
+      loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        hideError();
+
+        const userId = document.getElementById("userId").value;
+        const password = document.getElementById("password").value;
+
+        loginBtn.disabled = true;
+        loginBtn.textContent = "Signing in...";
+
+        try {
+          const response = await fetch("/api/stats-login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ userId, password }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || "Login failed");
+          }
+
+          // Store token and user data in memory
+          authToken = data.token;
+          userData = {
+            userId: data.userId,
+            name: data.name,
+            role: data.role,
+          };
+
+          // Clear form
+          loginForm.reset();
+
+          // Show stats view
+          loginView.classList.add("hidden");
+          statsView.classList.remove("hidden");
+
+          // Display user info
+          userInfo.textContent = `Signed in as ${userData.name} (${userData.role})`;
+
+          // Load stats
+          await loadStats();
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          loginBtn.disabled = false;
+          loginBtn.textContent = "Sign In";
+        }
+      });
+
+      // Sign out
+      signOutBtn.addEventListener("click", () => {
+        authToken = null;
+        userData = null;
+        statsView.classList.add("hidden");
+        loginView.classList.remove("hidden");
+        statsContent.innerHTML = "";
+      });
+
+      // Load stats
+      async function loadStats() {
+        if (!authToken) return;
+
+        statsContent.innerHTML = '<div class="card"><p>Loading...</p></div>';
+
+        try {
+          const response = await fetch("/api/stats", {
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to load stats");
+          }
+
+          const data = await response.json();
+          displayStats(data);
+        } catch (error) {
+          statsContent.innerHTML = `<div class="card error">Error: ${error.message}</div>`;
+        }
+      }
+
+      // Display stats
+      function displayStats(data) {
+        let html = "";
+
+        // Basic counters
+        html += `
+        <div class="card">
+          <h2>App Usage</h2>
+          <div class="stat-row">
+            <span class="stat-label">Opens</span>
+            <span class="stat-value">${data.opens || 0}</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Rooms Created</span>
+            <span class="stat-value">${data.rooms_created || 0}</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Messages Sent</span>
+            <span class="stat-value">${data.messages_sent || 0}</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Since</span>
+            <span class="stat-value" style="font-size: 0.9rem;">${new Date(data.since).toLocaleString()}</span>
+          </div>
+        </div>
+      `;
+
+        // Pilot stats
+        if (data.pilot && data.pilot.enabled) {
+          const pilot = data.pilot;
+
+          // Translations
+          html += `
+          <div class="card">
+            <h2>Translations</h2>
+            <div class="stat-row">
+              <span class="stat-label">Today</span>
+              <span class="stat-value">${pilot.today || 0}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Total</span>
+              <span class="stat-value">${pilot.total || 0}</span>
+            </div>
+          </div>
+        `;
+
+          // Testers
+          if (pilot.testers && pilot.testers.length > 0) {
+            const testerHtml = pilot.testers
+              .map(
+                (t) =>
+                  `<div class="stat-row"><span class="stat-label">${t.type}</span><span class="stat-value">${t.count}</span></div>`,
+              )
+              .join("");
+            html += `
+            <div class="card">
+              <h2>Testers</h2>
+              ${testerHtml}
+            </div>
+          `;
+          }
+
+          // Top language pairs
+          if (pilot.topLanguagePairs && pilot.topLanguagePairs.length > 0) {
+            const pairsHtml = pilot.topLanguagePairs
+              .map(
+                (p) =>
+                  `<div class="lang-pair"><span>${p.from_lang} → ${p.to_lang}</span><span>${p.total}</span></div>`,
+              )
+              .join("");
+            html += `
+            <div class="card">
+              <h2>Top Language Pairs</h2>
+              ${pairsHtml}
+            </div>
+          `;
+          }
+
+          // Top referrers
+          if (pilot.topReferrers && pilot.topReferrers.length > 0) {
+            const referrersHtml = pilot.topReferrers
+              .map(
+                (r) =>
+                  `<div class="referrer-row"><span>${r.referrer}</span><span>${r.count} referrals</span></div>`,
+              )
+              .join("");
+            html += `
+            <div class="card">
+              <h2>Top Referrers</h2>
+              ${referrersHtml}
+            </div>
+          `;
+          }
+
+          // Last 7 days activity
+          if (pilot.last7Days && pilot.last7Days.length > 0) {
+            const activityHtml = pilot.last7Days
+              .map(
+                (d) =>
+                  `<div class="stat-row"><span class="stat-label">${d.date}</span><span class="stat-value">${d.total}</span></div>`,
+              )
+              .join("");
+            html += `
+            <div class="card">
+              <h2>Last 7 Days</h2>
+              ${activityHtml}
+            </div>
+          `;
+          }
+        }
+
+        statsContent.innerHTML = html;
+      }
+    </script>
+  </body>
+</html>
