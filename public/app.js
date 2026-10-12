@@ -1346,6 +1346,11 @@ let interpState = {
   recognizerB: null,
   isRecordingA: false,
   isRecordingB: false,
+  checkBeforeTranslate: "off", // "off" | "ask" | "3" | "5" | "8"
+  readBackEnabled: false,
+  countdownTimer: null,
+  countdownSpeaker: null,
+  pendingText: null,
 };
 
 // Show mode tabs on join screen
@@ -1375,6 +1380,37 @@ function enterInterpreter() {
   $("interpLangA").value = interpState.langA;
   $("interpLangB").value = interpState.langB;
   updateInterpLabels();
+
+  // Load settings from localStorage
+  try {
+    const savedCheck = localStorage.getItem("interp_check_before_translate");
+    if (savedCheck) {
+      interpState.checkBeforeTranslate = savedCheck;
+      $("checkBeforeTranslate").value = savedCheck;
+    }
+    const savedReadBack = localStorage.getItem("interp_read_back");
+    if (savedReadBack !== null) {
+      interpState.readBackEnabled = savedReadBack === "true";
+      $("readBackToggle").checked = interpState.readBackEnabled;
+    }
+  } catch (e) {}
+
+  // Wire up settings change handlers
+  $("checkBeforeTranslate") &&
+    $("checkBeforeTranslate").addEventListener("change", (e) => {
+      interpState.checkBeforeTranslate = e.target.value;
+      try {
+        localStorage.setItem("interp_check_before_translate", e.target.value);
+      } catch (err) {}
+    });
+
+  $("readBackToggle") &&
+    $("readBackToggle").addEventListener("change", (e) => {
+      interpState.readBackEnabled = e.target.checked;
+      try {
+        localStorage.setItem("interp_read_back", e.target.checked.toString());
+      } catch (err) {}
+    });
 
   // Clear exchanges
   interpState.exchanges = [];
@@ -1464,7 +1500,7 @@ function startInterpRecording(speaker) {
         text += ev.results[i][0].transcript;
       }
       if (text.trim()) {
-        await handleInterpSpeech(speaker, text.trim());
+        await handleDictationEnd(speaker, text.trim());
       }
     };
 
@@ -1511,6 +1547,131 @@ function stopInterpRecording(speaker) {
     interpState.isRecordingB = false;
     $("micB").classList.remove("recording");
   }
+}
+
+async function handleDictationEnd(speaker, text) {
+  // Mic is already stopped by onend handler
+  const mode = interpState.checkBeforeTranslate;
+  const fromLang = speaker === "A" ? interpState.langA : interpState.langB;
+  const textInput = speaker === "A" ? $("textA") : $("textB");
+
+  // Read back if enabled
+  if (interpState.readBackEnabled) {
+    await readBackText(text, fromLang);
+  }
+
+  if (mode === "off") {
+    // Instant translation (current behavior)
+    await handleInterpSpeech(speaker, text);
+  } else if (mode === "ask") {
+    // Put text in box, wait for user to tap Translate
+    textInput.value = text;
+    textInput.focus();
+  } else {
+    // Auto mode: show countdown and translate at zero
+    const seconds = parseInt(mode);
+    textInput.value = text;
+    startCountdown(speaker, text, seconds);
+  }
+}
+
+async function readBackText(text, lang) {
+  // Speak the text in the speaker's own language
+  return new Promise((resolve) => {
+    const s = getSpeech();
+    const tag = speechTagFor(lang);
+    const voice = pickVoice(tag);
+
+    if (!s || !voice) {
+      // No voice available, skip silently
+      resolve();
+      return;
+    }
+
+    try {
+      s.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = tag;
+      u.voice = voice;
+      u.rate = 1.0;
+      u.onend = () => resolve();
+      u.onerror = () => resolve(); // Skip silently on error
+      s.speak(u);
+    } catch (e) {
+      resolve(); // Skip silently on error
+    }
+  });
+}
+
+function startCountdown(speaker, text, seconds) {
+  const textInput = speaker === "A" ? $("textA") : $("textB");
+  const fallback = speaker === "A" ? $("fallbackA") : $("fallbackB");
+
+  // Clear any existing countdown
+  cancelCountdown();
+
+  interpState.countdownSpeaker = speaker;
+  interpState.pendingText = text;
+
+  // Create countdown overlay
+  const overlay = document.createElement("div");
+  overlay.className = "countdown-overlay";
+  overlay.id = `countdown-${speaker}`;
+
+  const countdownText = document.createElement("div");
+  countdownText.className = "countdown-text";
+  countdownText.textContent = seconds;
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.className = "countdown-cancel";
+  cancelBtn.type = "button";
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.addEventListener("click", () => {
+    cancelCountdown();
+    textInput.focus();
+  });
+
+  overlay.appendChild(countdownText);
+  overlay.appendChild(cancelBtn);
+
+  // Position overlay over the fallback area
+  fallback.style.position = "relative";
+  fallback.appendChild(overlay);
+
+  let remaining = seconds;
+  interpState.countdownTimer = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) {
+      cancelCountdown();
+      handleInterpSpeech(speaker, interpState.pendingText);
+      textInput.value = "";
+    } else {
+      countdownText.textContent = remaining;
+    }
+  }, 1000);
+
+  // Stop countdown if user taps into the box to edit
+  const onFocus = () => {
+    cancelCountdown();
+    textInput.removeEventListener("focus", onFocus);
+  };
+  textInput.addEventListener("focus", onFocus);
+}
+
+function cancelCountdown() {
+  if (interpState.countdownTimer) {
+    clearInterval(interpState.countdownTimer);
+    interpState.countdownTimer = null;
+  }
+
+  // Remove countdown overlays
+  const overlayA = document.getElementById("countdown-A");
+  const overlayB = document.getElementById("countdown-B");
+  if (overlayA) overlayA.remove();
+  if (overlayB) overlayB.remove();
+
+  interpState.countdownSpeaker = null;
+  interpState.pendingText = null;
 }
 
 async function handleInterpSpeech(speaker, original) {
@@ -1725,6 +1886,8 @@ $("interpBack") &&
     // Stop any active recording
     stopInterpRecording("A");
     stopInterpRecording("B");
+    // Cancel any countdown
+    cancelCountdown();
     // Return to join screen
     show("joinScreen");
     showModeTabs();
