@@ -52,10 +52,10 @@ export async function checkTesterQuota(name, context) {
       return { allowed: false, reason: "global_cap", testerType: "none" };
     }
 
-    // Check if this is a known tester
+    // Check if this is a known tester in config
     const tester = config.testers[name];
     if (tester) {
-      // Named tester
+      // Named tester from config
       const allowed = await checkTesterLimits(env.PILOT_DB, name, tester, date);
       return {
         allowed: allowed.ok,
@@ -64,9 +64,30 @@ export async function checkTesterQuota(name, context) {
       };
     }
 
+    // Check if this is a tester in the database
+    const dbTester = await getTesterInfo(env.PILOT_DB, name);
+    if (dbTester && dbTester.type === "tester") {
+      // Auto-registered tester from D1
+      const limits = config.testerDefaults || { limit: 100, days: 30 };
+      const allowed = await checkTesterLimits(
+        env.PILOT_DB,
+        name,
+        {
+          limit: limits.limit,
+          days: limits.days,
+          startDate: new Date(dbTester.first_seen).toISOString().split("T")[0],
+        },
+        date,
+      );
+      return {
+        allowed: allowed.ok,
+        reason: allowed.reason,
+        testerType: "tester",
+      };
+    }
+
     // Check if this is a referral (guest) in the database
-    const guest = await getGuestInfo(env.PILOT_DB, name);
-    if (guest) {
+    if (dbTester && dbTester.type === "referral") {
       const limits = config.referralDefaults || { limit: 20, days: 14 };
       const allowed = await checkTesterLimits(
         env.PILOT_DB,
@@ -74,7 +95,7 @@ export async function checkTesterQuota(name, context) {
         {
           limit: limits.limit,
           days: limits.days,
-          startDate: new Date(guest.first_seen).toISOString().split("T")[0],
+          startDate: new Date(dbTester.first_seen).toISOString().split("T")[0],
         },
         date,
       );
@@ -83,6 +104,21 @@ export async function checkTesterQuota(name, context) {
         reason: allowed.reason,
         testerType: "referral",
       };
+    }
+
+    // Auto-register new tester if allowed
+    if (config.autoRegisterTesters !== false) {
+      if (!isValidTesterName(name)) {
+        // Invalid name - reject with not_found
+        return { allowed: false, reason: "not_found", testerType: "none" };
+      }
+
+      // Register the tester
+      const limits = config.testerDefaults || { limit: 100, days: 30 };
+      await registerTester(name, env.PILOT_DB, limits);
+
+      // Allow this first request
+      return { allowed: true, reason: "ok", testerType: "tester" };
     }
 
     // Not found
@@ -98,12 +134,26 @@ export async function checkTesterQuota(name, context) {
  * Register a new referral guest.
  * @param {string} guestId - Random device ID
  * @param {string} referrer - Tester name who shared the link
- * @param {object} env - Cloudflare env with PILOT_DB binding
+ * @param {object} env - Cloudflare env with PILOT_CONFIG and PILOT_DB bindings
  */
 export async function registerReferral(guestId, referrer, env) {
-  if (!env.PILOT_DB) return;
+  if (!env.PILOT_DB || !env.PILOT_CONFIG) return;
 
   try {
+    // Verify referrer exists in config or D1
+    const configJson = await env.PILOT_CONFIG.get("pilot:config");
+    if (!configJson) return;
+
+    const config = JSON.parse(configJson);
+    const isConfigTester = config.testers && config.testers[referrer];
+    const dbTester = await getTesterInfo(env.PILOT_DB, referrer);
+    const isDbTester = dbTester && dbTester.type === "tester";
+
+    if (!isConfigTester && !isDbTester) {
+      // Referrer is not a valid tester, don't register
+      return;
+    }
+
     const now = Date.now();
     await env.PILOT_DB.prepare(
       `INSERT OR IGNORE INTO testers (name, type, referrer, first_seen, last_seen, total_translations)
@@ -165,6 +215,38 @@ export async function incrementCounters(name, fromLang, toLang, context) {
 
 // ---- Internal helpers ----
 
+function isValidTesterName(name) {
+  // Must match ^[a-z0-9-]{3,32}$
+  const regex = /^[a-z0-9-]{3,32}$/;
+  return regex.test(name);
+}
+
+async function getTesterInfo(db, name) {
+  try {
+    return await db
+      .prepare(`SELECT * FROM testers WHERE name = ?`)
+      .bind(name)
+      .first();
+  } catch (e) {
+    return null;
+  }
+}
+
+async function registerTester(name, db, limits) {
+  try {
+    const now = Date.now();
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO testers (name, type, referrer, first_seen, last_seen, total_translations)
+         VALUES (?, 'tester', NULL, ?, ?, 0)`,
+      )
+      .bind(name, now, now)
+      .run();
+  } catch (e) {
+    console.error("Failed to register tester:", e);
+  }
+}
+
 async function getGlobalDailyCount(db, date) {
   try {
     const result = await db
@@ -174,17 +256,6 @@ async function getGlobalDailyCount(db, date) {
     return result?.total || 0;
   } catch (e) {
     return 0;
-  }
-}
-
-async function getGuestInfo(db, guestId) {
-  try {
-    return await db
-      .prepare(`SELECT * FROM testers WHERE name = ? AND type = 'referral'`)
-      .bind(guestId)
-      .first();
-  } catch (e) {
-    return null;
   }
 }
 

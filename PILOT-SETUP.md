@@ -32,6 +32,10 @@ Manual steps required in the Cloudflare dashboard:
 2. Click "Add entry"
 3. Key: `pilot:config`
 4. Value: Copy and paste contents of `pilot-config-example.json`
+   - By default, only `phoenix` is configured as the owner (unlimited access)
+   - Other testers auto-register when they visit `?t=<name>` (names must match `^[a-z0-9-]{3,32}$`)
+   - Auto-registration uses `testerDefaults` (100 translations/day, 30-day trial)
+   - Set `autoRegisterTesters: false` to disable auto-registration
 5. Click "Save"
 
 ## 5. Add Bindings to Cloudflare Pages
