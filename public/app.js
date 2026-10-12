@@ -1354,6 +1354,9 @@ let interpState = {
   pendingCard: null,
 };
 
+// Track which languages have shown "no voice" toast this session
+const noVoiceToastShown = new Set();
+
 // Show mode tabs on join screen
 function showModeTabs() {
   $("modeTabs").style.display = "flex";
@@ -1597,30 +1600,123 @@ async function handleDictationEnd(speaker, text) {
 
 async function readBackText(text, lang) {
   // Speak the text in the speaker's own language
+  // Uses same fallback path as speakText: local voice -> server TTS
   return new Promise((resolve) => {
-    const s = getSpeech();
     const tag = speechTagFor(lang);
-    const voice = pickVoice(tag);
+    const localVoice = pickVoice(tag);
+    const s = getSpeech();
 
-    if (!s || !voice) {
-      // No voice available, skip silently
-      resolve();
+    // Try local voice first if available
+    if (s && localVoice) {
+      try {
+        s.cancel();
+      } catch (e) {}
+
+      let u;
+      try {
+        u = new SpeechSynthesisUtterance(text);
+      } catch (e) {
+        // Failed to create utterance, try server TTS
+        playServerTTSReadBack(text, lang, resolve);
+        return;
+      }
+
+      u.lang = tag;
+      u.voice = localVoice;
+      u.rate = 1.0;
+      u.onend = () => resolve();
+      u.onerror = () => {
+        // Local failed, try server TTS
+        playServerTTSReadBack(text, lang, resolve);
+      };
+
+      try {
+        s.speak(u);
+      } catch (e) {
+        // Failed to speak, try server TTS
+        playServerTTSReadBack(text, lang, resolve);
+      }
       return;
     }
 
-    try {
-      s.cancel();
-      const u = new SpeechSynthesisUtterance(text);
+    // No local voice available, try server TTS
+    playServerTTSReadBack(text, lang, resolve);
+  });
+}
+
+// Server TTS for read-back with once-per-language toast on failure
+function playServerTTSReadBack(text, langCode, resolve) {
+  const url = "/api/tts";
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, lang: speechTagFor(langCode) }),
+  })
+    .then((r) => {
+      if (!r.ok) throw new Error("tts " + r.status);
+      return r.blob();
+    })
+    .then((blob) => {
+      const a = new Audio(URL.createObjectURL(blob));
+      a.onended = () => resolve();
+      a.onerror = () => {
+        showNoVoiceToast(langCode);
+        resolve();
+      };
+      return a.play();
+    })
+    .catch(() => {
+      // Server TTS failed - try device voice as last resort
+      const tag = speechTagFor(langCode);
+      const s = getSpeech();
+
+      if (!s) {
+        showNoVoiceToast(langCode);
+        resolve();
+        return;
+      }
+
+      const localVoice = pickVoice(tag);
+      try {
+        s.cancel();
+      } catch (e) {}
+
+      let u;
+      try {
+        u = new SpeechSynthesisUtterance(text);
+      } catch (e) {
+        showNoVoiceToast(langCode);
+        resolve();
+        return;
+      }
+
       u.lang = tag;
-      u.voice = voice;
+      if (localVoice) u.voice = localVoice;
       u.rate = 1.0;
       u.onend = () => resolve();
-      u.onerror = () => resolve(); // Skip silently on error
-      s.speak(u);
-    } catch (e) {
-      resolve(); // Skip silently on error
-    }
-  });
+      u.onerror = () => {
+        showNoVoiceToast(langCode);
+        resolve();
+      };
+
+      try {
+        s.speak(u);
+      } catch (e) {
+        showNoVoiceToast(langCode);
+        resolve();
+      }
+    });
+}
+
+// Show "no voice" toast once per language per session
+function showNoVoiceToast(langCode) {
+  if (noVoiceToastShown.has(langCode)) return;
+  noVoiceToastShown.add(langCode);
+
+  const langName = LANGS.find((l) => l.code === langCode)?.english || langCode;
+  toast(
+    `No voice for ${langName} on this phone, you can install one in your phone's text-to-speech settings`,
+  );
 }
 
 function showPendingCard(speaker, text, autoMode) {
