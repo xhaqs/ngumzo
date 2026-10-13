@@ -42,13 +42,12 @@ const counts = (globalThis.__ngumzo_counts ||= {
 
 /**
  * Verify admin access via Bearer token or legacy API key
- * @param {Request|Object} req - Request object (Vercel or Cloudflare format)
+ * @param {Request} req - Request object
  * @returns {Promise<boolean>} - true if authorized
  */
 async function verifyAdminAccess(req) {
   // Try Bearer token first
-  const authHeader =
-    req.headers?.get?.("authorization") || req.headers?.authorization || "";
+  const authHeader = req.headers.get("authorization") || "";
 
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
     const token = authHeader.substring(7);
@@ -73,56 +72,72 @@ async function verifyAdminAccess(req) {
   }
 
   // Fall back to legacy API key
-  const key = (req.query && req.query.key) || "";
+  const url = new URL(req.url);
+  const key = url.searchParams.get("key") || "";
   return key === ADMIN_KEY;
 }
 
-export default async function handler(req, res) {
-  if (req.method === "POST") {
-    try {
-      const { event } = req.body || {};
-      if (event === "open") counts.opens++;
-      else if (event === "room_created") counts.rooms_created++;
-      else if (event === "message_sent") counts.messages_sent++;
-      // unknown events are silently ignored — no error feedback to clients
-      res.status(204).end();
-    } catch (e) {
-      res.status(204).end(); // never let analytics break the app
-    }
-    return;
+export async function onRequestPost(context) {
+  try {
+    const { event } = await context.request.json();
+    if (event === "open") counts.opens++;
+    else if (event === "room_created") counts.rooms_created++;
+    else if (event === "message_sent") counts.messages_sent++;
+    // unknown events are silently ignored — no error feedback to clients
+    return new Response(null, { status: 204 });
+  } catch (e) {
+    return new Response(null, { status: 204 }); // never let analytics break the app
+  }
+}
+
+export async function onRequestGet(context) {
+  const req = context.request;
+
+  // Verify admin access (Bearer token or legacy API key)
+  const isAuthorized = await verifyAdminAccess(req);
+  if (!isAuthorized) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
-  if (req.method === "GET") {
-    // Verify admin access (Bearer token or legacy API key)
-    const isAuthorized = await verifyAdminAccess(req);
-    if (!isAuthorized) {
-      res.status(404).end(); // hide the endpoint from casual snooping
-      return;
+  // Basic counts (in-memory)
+  const result = { ...counts };
+
+  // Add pilot stats if available (via edge function)
+  try {
+    const url = new URL(req.url);
+    const pilotStats = await fetch(
+      url.hostname === "localhost"
+        ? "http://localhost:8788/api/_pilot-stats"
+        : `https://${url.host}/api/_pilot-stats`,
+      {
+        headers: { "X-Admin-Key": ADMIN_KEY },
+      },
+    );
+    if (pilotStats.ok) {
+      result.pilot = await pilotStats.json();
     }
-
-    // Basic counts (in-memory)
-    const result = { ...counts };
-
-    // Add pilot stats if available (via edge function)
-    try {
-      const pilotStats = await fetch(
-        req.headers.host.startsWith("localhost")
-          ? "http://localhost:8788/api/_pilot-stats"
-          : `https://${req.headers.host}/api/_pilot-stats`,
-        {
-          headers: { "X-Admin-Key": ADMIN_KEY },
-        },
-      );
-      if (pilotStats.ok) {
-        result.pilot = await pilotStats.json();
-      }
-    } catch (e) {
-      // Pilot stats unavailable (expected if not deployed or no bindings)
-    }
-
-    res.status(200).json(result);
-    return;
+  } catch (e) {
+    // Pilot stats unavailable (expected if not deployed or no bindings)
   }
 
-  res.status(405).end();
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export async function onRequest(context) {
+  if (context.request.method === "POST") {
+    return onRequestPost(context);
+  }
+  if (context.request.method === "GET") {
+    return onRequestGet(context);
+  }
+  return new Response(JSON.stringify({ error: "Method not allowed" }), {
+    status: 405,
+    headers: { "Content-Type": "application/json" },
+  });
 }
