@@ -1,22 +1,21 @@
 {
   "enabled": true,
+  "useGate": false,
   "globalDailyCap": 1500,
   "autoRegisterTesters": true,
-  "testers": {
-    "phoenix": {
-      "limit": 0,
-      "days": 0,
-      "note": "Owner account - limit: 0 means unlimited, days: 0 means no expiry"
-    }
-  },
+  "testers": {},
   "testerDefaults": {
     "limit": 100,
     "days": 30,
-    "note": "Auto-registered when ?t=<name> is used (name must match ^[a-z0-9-]{3,32}$)"
+    "note": "When useGate=true: registered on first allowed gate check. When useGate=false: auto-registered when ?t=<name> is used (name must match ^[a-z0-9-]{3,32}$)"
   },
   "referralDefaults": {
     "limit": 20,
     "days": 14,
-    "note": "Auto-registered when someone clicks ?r=<tester> link"
+    "note": "Auto-registered when someone clicks ?r=<tester> link (referrer validated via gate when useGate=true)"
+  },
+  "notes": {
+    "useGate": "When true, validates invite codes via Keystone gate API. When false, uses legacy auto-register mode. Deploying this changes nothing until you set useGate=true.",
+    "owner": "For unlimited access, add your invite code to testers with limit:0. Example: { \"your-invite-code\": { \"limit\": 0, \"days\": 0 } }"
   }
 }

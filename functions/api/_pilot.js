@@ -8,17 +8,100 @@
    Output: { allowed: boolean, reason: string, testerType: string }
 
    Reasons:
-   - "ok"           → allowed
-   - "daily_limit"  → hit daily quota
-   - "trial_ended"  → trial period expired
-   - "global_cap"   → circuit-breaker hit
-   - "not_found"    → no tester/referral found
-   - "disabled"     → pilot system disabled
+   - "ok"              → allowed
+   - "daily_limit"     → hit daily quota
+   - "trial_ended"     → trial period expired
+   - "global_cap"      → circuit-breaker hit
+   - "not_found"       → no tester/referral found
+   - "disabled"        → pilot system disabled
+   - "invite_required" → Keystone gate requires invite (useGate mode)
+   - "app_off"         → Keystone gate app disabled (useGate mode)
+   - "gate_unavailable"→ Keystone gate error (useGate mode)
 
    Design:
    This is the ONLY place that checks quotas. Later, Keystone
    can replace the internals without touching translate.js or app.js.
    ============================================================ */
+
+// In-memory cache for gate results (60 second TTL)
+const gateCache = new Map();
+const GATE_CACHE_TTL = 60 * 1000; // 60 seconds
+
+// Keystone gate URL
+const KEYSTONE_GATE_URL =
+  "https://keystone.riakoine.com/api/keystone?action=gate&app=ngumzo";
+
+/**
+ * Check Keystone gate with caching.
+ * @param {string} inviteCode - Tester invite code
+ * @returns {Promise<{allowed: boolean, reason: string}>}
+ */
+async function checkKeystoneGate(inviteCode) {
+  const codePrefix = inviteCode.slice(0, 4); // Only log first 4 chars
+
+  // Check cache first
+  const cached = gateCache.get(inviteCode);
+  if (cached && Date.now() < cached.expiresAt) {
+    return { allowed: cached.allowed, reason: cached.reason };
+  }
+
+  try {
+    const response = await fetch(
+      `${KEYSTONE_GATE_URL}&invite=${encodeURIComponent(inviteCode)}`,
+      {
+        headers: {
+          Origin: "https://ngumzo.pages.dev",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      console.error(
+        `Gate check failed for ${codePrefix}...: HTTP ${response.status}`,
+      );
+      // Fail closed: deny access if gate is down
+      return { allowed: false, reason: "gate_unavailable" };
+    }
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      console.error(`Gate returned error for ${codePrefix}...:`, data.error);
+      return { allowed: false, reason: "gate_unavailable" };
+    }
+
+    // Map gate reasons to friendly messages
+    let reason = data.reason;
+    if (!data.allowed) {
+      // Keep the specific gate reasons: invite_required, app_off, gate_unavailable
+      if (
+        data.reason === "invite_required" ||
+        data.reason === "app_off" ||
+        data.reason === "gate_unavailable"
+      ) {
+        reason = data.reason;
+      } else {
+        // Default to invite_required for other denial reasons
+        reason = "invite_required";
+      }
+    }
+
+    // Cache the result (only cache allowed=true for 60 seconds)
+    if (data.allowed) {
+      gateCache.set(inviteCode, {
+        allowed: true,
+        reason: reason,
+        expiresAt: Date.now() + GATE_CACHE_TTL,
+      });
+    }
+
+    return { allowed: data.allowed, reason: reason };
+  } catch (error) {
+    console.error(`Gate check exception for ${codePrefix}...:`, error.message);
+    // Fail closed: deny access on network/parse errors
+    return { allowed: false, reason: "gate_unavailable" };
+  }
+}
 
 /**
  * Check if a tester is allowed to translate.
@@ -52,16 +135,34 @@ export async function checkTesterQuota(name, context) {
       return { allowed: false, reason: "global_cap", testerType: "none" };
     }
 
-    // Check if this is a known tester in config
+    // Check if this is a known tester in config (skip gate for config testers)
     const tester = config.testers[name];
     if (tester) {
-      // Named tester from config
+      // Named tester from config - unlimited access if limit is 0
       const allowed = await checkTesterLimits(env.PILOT_DB, name, tester, date);
       return {
         allowed: allowed.ok,
         reason: allowed.reason,
         testerType: "tester",
       };
+    }
+
+    // ---- KEYSTONE GATE CHECK (if useGate is enabled) ----
+    if (config.useGate === true) {
+      // Skip gate check for guest IDs (referrals) - they're validated via referrer
+      if (!name.startsWith("guest-")) {
+        const gateResult = await checkKeystoneGate(name);
+
+        if (!gateResult.allowed) {
+          return {
+            allowed: false,
+            reason: gateResult.reason,
+            testerType: "none",
+          };
+        }
+
+        // Gate allowed - continue with quota checks below
+      }
     }
 
     // Check if this is a tester in the database
@@ -107,7 +208,27 @@ export async function checkTesterQuota(name, context) {
     }
 
     // Auto-register new tester if allowed
-    if (config.autoRegisterTesters !== false) {
+    if (config.useGate === true) {
+      // When useGate is true, only register if gate check passed above
+      // Guests (guest-*) should NOT auto-register - they must be registered via referral
+      if (name.startsWith("guest-")) {
+        // Guest not in DB and no referral registration - deny
+        return { allowed: false, reason: "not_found", testerType: "none" };
+      }
+
+      if (!isValidTesterName(name)) {
+        return { allowed: false, reason: "not_found", testerType: "none" };
+      }
+
+      // If we reach here, gate check passed and tester is not in DB
+      // Register them now (first allowed use)
+      const limits = config.testerDefaults || { limit: 100, days: 30 };
+      await registerTester(name, env.PILOT_DB, limits);
+
+      // Allow this first request
+      return { allowed: true, reason: "ok", testerType: "tester" };
+    } else if (config.autoRegisterTesters !== false) {
+      // Legacy auto-register mode (when useGate is false)
       if (!isValidTesterName(name)) {
         // Invalid name - reject with not_found
         return { allowed: false, reason: "not_found", testerType: "none" };
@@ -124,8 +245,27 @@ export async function checkTesterQuota(name, context) {
     // Not found
     return { allowed: false, reason: "not_found", testerType: "none" };
   } catch (e) {
-    // On error, fail open (allow) to avoid breaking Ngumzo
+    // When useGate is enabled, fail closed for safety
+    // Otherwise fail open to avoid breaking Ngumzo
     console.error("Pilot quota check error:", e);
+
+    try {
+      const configJson = await env.PILOT_CONFIG.get("pilot:config");
+      if (configJson) {
+        const config = JSON.parse(configJson);
+        if (config.useGate === true) {
+          // Fail closed in gate mode
+          return {
+            allowed: false,
+            reason: "gate_unavailable",
+            testerType: "none",
+          };
+        }
+      }
+    } catch (innerE) {
+      // If we can't even read config, fail open
+    }
+
     return { allowed: true, reason: "ok", testerType: "none" };
   }
 }
@@ -140,18 +280,34 @@ export async function registerReferral(guestId, referrer, env) {
   if (!env.PILOT_DB || !env.PILOT_CONFIG) return;
 
   try {
-    // Verify referrer exists in config or D1
+    // Read config
     const configJson = await env.PILOT_CONFIG.get("pilot:config");
     if (!configJson) return;
 
     const config = JSON.parse(configJson);
-    const isConfigTester = config.testers && config.testers[referrer];
-    const dbTester = await getTesterInfo(env.PILOT_DB, referrer);
-    const isDbTester = dbTester && dbTester.type === "tester";
 
-    if (!isConfigTester && !isDbTester) {
-      // Referrer is not a valid tester, don't register
-      return;
+    // When useGate is true, validate referrer code through gate first
+    if (config.useGate === true) {
+      const gateResult = await checkKeystoneGate(referrer);
+      if (!gateResult.allowed) {
+        // Referrer code is not valid, don't register guest
+        const codePrefix = referrer.slice(0, 4);
+        console.log(
+          `Referral rejected: referrer ${codePrefix}... not allowed by gate`,
+        );
+        return;
+      }
+      // Gate allowed - continue with registration
+    } else {
+      // Legacy mode: verify referrer exists in config or D1
+      const isConfigTester = config.testers && config.testers[referrer];
+      const dbTester = await getTesterInfo(env.PILOT_DB, referrer);
+      const isDbTester = dbTester && dbTester.type === "tester";
+
+      if (!isConfigTester && !isDbTester) {
+        // Referrer is not a valid tester, don't register
+        return;
+      }
     }
 
     const now = Date.now();

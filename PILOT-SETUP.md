@@ -32,10 +32,12 @@ Manual steps required in the Cloudflare dashboard:
 2. Click "Add entry"
 3. Key: `pilot:config`
 4. Value: Copy and paste contents of `pilot-config-example.json`
-   - By default, only `phoenix` is configured as the owner (unlimited access)
-   - Other testers auto-register when they visit `?t=<name>` (names must match `^[a-z0-9-]{3,32}$`)
+   - By default, `useGate: false` means legacy mode (no changes to existing behavior)
+   - When `useGate: false`: testers auto-register when they visit `?t=<name>` (names must match `^[a-z0-9-]{3,32}$`)
+   - When `useGate: true`: validates invite codes via Keystone gate API
+   - For unlimited access, add your invite code to `testers` with `limit: 0` and `days: 0`
    - Auto-registration uses `testerDefaults` (100 translations/day, 30-day trial)
-   - Set `autoRegisterTesters: false` to disable auto-registration
+   - Set `autoRegisterTesters: false` to disable legacy auto-registration
 5. Click "Save"
 
 ## 5. Add Bindings to Cloudflare Pages
@@ -63,10 +65,17 @@ Manual steps required in the Cloudflare dashboard:
 
 Test the pilot system:
 
-- Visit: `https://ngumzo.pages.dev/?t=phoenix`
-- Translate something
+- When `useGate: false` (default): Visit `https://ngumzo.pages.dev/?t=any-test-name` and translate something
+- When `useGate: true`: Visit `https://ngumzo.pages.dev/?t=YOUR_INVITE_CODE` with a valid Keystone invite code
 - Check stats: `https://ngumzo.pages.dev/api/stats?key=YOUR_ADMIN_KEY`
 - Should see `pilot` section in JSON response
+
+**Gate Mode Notes:**
+
+- `useGate: true` enables Keystone invite validation
+- Fail-closed on errors for security
+- 60-second cache per invite code
+- Never logs full invite codes (max 4 chars)
 
 ---
 

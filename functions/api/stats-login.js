@@ -32,7 +32,7 @@ export async function onRequestPost(context) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Origin: "https://keystone.riakoine.com",
+        Origin: "https://ngumzo.pages.dev",
       },
       body: JSON.stringify({
         password: body.password,

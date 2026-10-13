@@ -283,6 +283,12 @@ async function translate(text, from, to) {
           );
         } else if (data.error === "not_found") {
           toast("Ngumzo is in private beta — get an invite link from a tester");
+        } else if (data.error === "invite_required") {
+          toast("Ngumzo is in private beta — get an invite link from a tester");
+        } else if (data.error === "app_off") {
+          toast("Ngumzo is paused right now — try again later");
+        } else if (data.error === "gate_unavailable") {
+          toast("Ngumzo is temporarily unavailable — try again shortly");
         }
         return text; // show original when quota exceeded
       }
