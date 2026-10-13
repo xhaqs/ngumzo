@@ -129,6 +129,9 @@ export async function checkTesterQuota(name, context) {
       return { allowed: true, reason: "ok", testerType: "none" };
     }
 
+    // Normalize invite code to uppercase (for config lookup and gate check)
+    const normalizedName = name.toUpperCase();
+
     // Check global daily cap (circuit-breaker)
     const globalCount = await getGlobalDailyCount(env.PILOT_DB, date);
     if (config.globalDailyCap && globalCount >= config.globalDailyCap) {
@@ -136,10 +139,15 @@ export async function checkTesterQuota(name, context) {
     }
 
     // Check if this is a known tester in config (skip gate for config testers)
-    const tester = config.testers[name];
+    const tester = config.testers[normalizedName];
     if (tester) {
       // Named tester from config - unlimited access if limit is 0
-      const allowed = await checkTesterLimits(env.PILOT_DB, name, tester, date);
+      const allowed = await checkTesterLimits(
+        env.PILOT_DB,
+        normalizedName,
+        tester,
+        date,
+      );
       return {
         allowed: allowed.ok,
         reason: allowed.reason,
@@ -151,7 +159,7 @@ export async function checkTesterQuota(name, context) {
     if (config.useGate === true) {
       // Skip gate check for guest IDs (referrals) - they're validated via referrer
       if (!name.startsWith("guest-")) {
-        const gateResult = await checkKeystoneGate(name);
+        const gateResult = await checkKeystoneGate(normalizedName);
 
         if (!gateResult.allowed) {
           return {
@@ -166,13 +174,13 @@ export async function checkTesterQuota(name, context) {
     }
 
     // Check if this is a tester in the database
-    const dbTester = await getTesterInfo(env.PILOT_DB, name);
+    const dbTester = await getTesterInfo(env.PILOT_DB, normalizedName);
     if (dbTester && dbTester.type === "tester") {
       // Auto-registered tester from D1
       const limits = config.testerDefaults || { limit: 100, days: 30 };
       const allowed = await checkTesterLimits(
         env.PILOT_DB,
-        name,
+        normalizedName,
         {
           limit: limits.limit,
           days: limits.days,
@@ -192,7 +200,7 @@ export async function checkTesterQuota(name, context) {
       const limits = config.referralDefaults || { limit: 20, days: 14 };
       const allowed = await checkTesterLimits(
         env.PILOT_DB,
-        name,
+        normalizedName,
         {
           limit: limits.limit,
           days: limits.days,
@@ -216,14 +224,14 @@ export async function checkTesterQuota(name, context) {
         return { allowed: false, reason: "not_found", testerType: "none" };
       }
 
-      if (!isValidTesterName(name)) {
+      if (!isValidInviteCode(normalizedName)) {
         return { allowed: false, reason: "not_found", testerType: "none" };
       }
 
       // If we reach here, gate check passed and tester is not in DB
       // Register them now (first allowed use)
       const limits = config.testerDefaults || { limit: 100, days: 30 };
-      await registerTester(name, env.PILOT_DB, limits);
+      await registerTester(normalizedName, env.PILOT_DB, limits);
 
       // Allow this first request
       return { allowed: true, reason: "ok", testerType: "tester" };
@@ -280,6 +288,9 @@ export async function registerReferral(guestId, referrer, env) {
   if (!env.PILOT_DB || !env.PILOT_CONFIG) return;
 
   try {
+    // Normalize referrer code to uppercase
+    const normalizedReferrer = referrer.toUpperCase();
+
     // Read config
     const configJson = await env.PILOT_CONFIG.get("pilot:config");
     if (!configJson) return;
@@ -288,10 +299,10 @@ export async function registerReferral(guestId, referrer, env) {
 
     // When useGate is true, validate referrer code through gate first
     if (config.useGate === true) {
-      const gateResult = await checkKeystoneGate(referrer);
+      const gateResult = await checkKeystoneGate(normalizedReferrer);
       if (!gateResult.allowed) {
         // Referrer code is not valid, don't register guest
-        const codePrefix = referrer.slice(0, 4);
+        const codePrefix = normalizedReferrer.slice(0, 4);
         console.log(
           `Referral rejected: referrer ${codePrefix}... not allowed by gate`,
         );
@@ -300,8 +311,9 @@ export async function registerReferral(guestId, referrer, env) {
       // Gate allowed - continue with registration
     } else {
       // Legacy mode: verify referrer exists in config or D1
-      const isConfigTester = config.testers && config.testers[referrer];
-      const dbTester = await getTesterInfo(env.PILOT_DB, referrer);
+      const isConfigTester =
+        config.testers && config.testers[normalizedReferrer];
+      const dbTester = await getTesterInfo(env.PILOT_DB, normalizedReferrer);
       const isDbTester = dbTester && dbTester.type === "tester";
 
       if (!isConfigTester && !isDbTester) {
@@ -315,7 +327,7 @@ export async function registerReferral(guestId, referrer, env) {
       `INSERT OR IGNORE INTO testers (name, type, referrer, first_seen, last_seen, total_translations)
        VALUES (?, 'referral', ?, ?, ?, 0)`,
     )
-      .bind(guestId, referrer, now, now)
+      .bind(guestId, normalizedReferrer, now, now)
       .run();
   } catch (e) {
     console.error("Failed to register referral:", e);
@@ -334,6 +346,11 @@ export async function incrementCounters(name, fromLang, toLang, context) {
   if (!env.PILOT_DB) return;
 
   try {
+    // Normalize invite codes to uppercase (but not guest IDs)
+    const normalizedName = name.startsWith("guest-")
+      ? name
+      : name.toUpperCase();
+
     const now = Date.now();
     const db = env.PILOT_DB;
 
@@ -343,7 +360,7 @@ export async function incrementCounters(name, fromLang, toLang, context) {
         `INSERT INTO daily_counts (date, tester, count) VALUES (?, ?, 1)
          ON CONFLICT(date, tester) DO UPDATE SET count = count + 1`,
       )
-      .bind(date, name)
+      .bind(date, normalizedName)
       .run();
 
     // Update tester stats
@@ -353,7 +370,7 @@ export async function incrementCounters(name, fromLang, toLang, context) {
          VALUES (?, 'tester', NULL, ?, ?, 1)
          ON CONFLICT(name) DO UPDATE SET last_seen = ?, total_translations = total_translations + 1`,
       )
-      .bind(name, now, now, now)
+      .bind(normalizedName, now, now, now)
       .run();
 
     // Increment language pair count
@@ -362,7 +379,7 @@ export async function incrementCounters(name, fromLang, toLang, context) {
         `INSERT INTO lang_pairs (tester, from_lang, to_lang, count) VALUES (?, ?, ?, 1)
          ON CONFLICT(tester, from_lang, to_lang) DO UPDATE SET count = count + 1`,
       )
-      .bind(name, fromLang, toLang)
+      .bind(normalizedName, fromLang, toLang)
       .run();
   } catch (e) {
     console.error("Failed to increment counters:", e);
@@ -371,8 +388,14 @@ export async function incrementCounters(name, fromLang, toLang, context) {
 
 // ---- Internal helpers ----
 
+function isValidInviteCode(code) {
+  // Must match ^[A-Z0-9-]{4,64}$
+  const regex = /^[A-Z0-9-]{4,64}$/;
+  return regex.test(code);
+}
+
 function isValidTesterName(name) {
-  // Must match ^[a-z0-9-]{3,32}$
+  // Must match ^[a-z0-9-]{3,32}$ (legacy mode only)
   const regex = /^[a-z0-9-]{3,32}$/;
   return regex.test(name);
 }

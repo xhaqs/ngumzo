@@ -177,6 +177,19 @@ function toast(msg) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 2800);
 }
+function banner(msg) {
+  const b = document.createElement("div");
+  b.className = "banner";
+  b.textContent = msg;
+  b.style.cssText =
+    "position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10000;max-width:90%;text-align:center;cursor:pointer;";
+  document.body.appendChild(b);
+  const remove = () => {
+    if (b.parentNode) b.remove();
+  };
+  b.addEventListener("click", remove);
+  setTimeout(remove, 8000);
+}
 function show(screenId) {
   document
     .querySelectorAll(".screen")
@@ -274,23 +287,27 @@ async function translate(text, from, to) {
       // Handle pilot quota errors with user-friendly messages
       if (r.status === 429) {
         if (data.error === "daily_limit") {
-          toast("Daily limit reached — resets at midnight UTC");
+          banner("Daily limit reached — resets at midnight UTC");
         } else if (data.error === "trial_ended") {
-          toast("Trial period ended — contact us to continue using Ngumzo");
+          banner("Trial period ended — contact us to continue using Ngumzo");
         } else if (data.error === "global_cap") {
-          toast(
+          banner(
             "Ngumzo is at capacity today (temporary limit while we scale) — try again tomorrow",
           );
         } else if (data.error === "not_found") {
-          toast("Ngumzo is in private beta — get an invite link from a tester");
+          banner(
+            "Ngumzo is in private beta — get an invite link from a tester",
+          );
         } else if (data.error === "invite_required") {
-          toast("Ngumzo is in private beta — get an invite link from a tester");
+          banner(
+            "Ngumzo is in private beta — get an invite link from a tester",
+          );
         } else if (data.error === "app_off") {
-          toast("Ngumzo is paused right now — try again later");
+          banner("Ngumzo is paused right now — try again later");
         } else if (data.error === "gate_unavailable") {
-          toast("Ngumzo is temporarily unavailable — try again shortly");
+          banner("Ngumzo is temporarily unavailable — try again shortly");
         }
-        return text; // show original when quota exceeded
+        return null; // don't show anything when quota exceeded
       }
       throw new Error("translate " + r.status);
     }
@@ -633,6 +650,7 @@ async function renderIncoming(id, raw) {
 
   // translate THEIR message into MY language
   const shown = await translate(payload.text, payload.lang, me.lang);
+  if (shown === null) return; // quota exceeded, banner already shown
   renderBubble({
     mine: false,
     name: payload.name,
@@ -1302,13 +1320,15 @@ function generateGuestId() {
 function handlePilotParams() {
   const params = new URLSearchParams(location.search);
   const testerParam = params.get("t");
+  const inviteParam = params.get("invite");
   const referrerParam = params.get("r");
 
-  if (testerParam) {
-    // ?t=<name> — tester link
-    setPilotData(testerParam, null);
+  // Accept both ?t= and ?invite= (normalize to uppercase)
+  if (testerParam || inviteParam) {
+    const code = (testerParam || inviteParam).toUpperCase();
+    setPilotData(code, null);
   } else if (referrerParam) {
-    // ?r=<name> — referral link
+    // ?r=<name> — referral link (normalize to uppercase)
     const existing = getPilotData();
     if (!existing.tester || existing.tester.startsWith("guest-")) {
       // Generate stable guest ID if needed
@@ -1316,7 +1336,7 @@ function handlePilotParams() {
         existing.tester && existing.tester.startsWith("guest-")
           ? existing.tester
           : generateGuestId();
-      setPilotData(guestId, referrerParam);
+      setPilotData(guestId, referrerParam.toUpperCase());
     }
     // else: already a named tester, don't overwrite
   }
@@ -1935,6 +1955,7 @@ async function handleInterpSpeech(speaker, original) {
 
   // Translate
   const translated = await translate(original, fromLang, toLang);
+  if (translated === null) return; // quota exceeded, banner already shown
 
   // Add to exchanges
   interpState.exchanges.push({

@@ -131,7 +131,7 @@ await runTest(
     const env = createMockEnv(config);
     const context = { env, date: "2026-01-15" };
 
-    const result = await checkTesterQuota("test-code", context);
+    const result = await checkTesterQuota("TEST-CODE", context);
 
     assertEqual(result.allowed, false, "Should deny when invite required");
     assertEqual(
@@ -167,7 +167,7 @@ await runTest("Test 3: useGate=true, gate returns app_off", async () => {
   const env = createMockEnv(config);
   const context = { env, date: "2026-01-15" };
 
-  const result = await checkTesterQuota("valid-code", context);
+  const result = await checkTesterQuota("VALID-CODE", context);
 
   assertEqual(result.allowed, false, "Should deny when app is off");
   assertEqual(result.reason, "app_off", "Reason should be app_off");
@@ -195,7 +195,7 @@ await runTest(
     const env = createMockEnv(config);
     const context = { env, date: "2026-01-15" };
 
-    const result = await checkTesterQuota("test-code", context);
+    const result = await checkTesterQuota("TEST-CODE", context);
 
     assertEqual(result.allowed, false, "Should fail closed on gate error");
     assertEqual(
@@ -233,7 +233,7 @@ await runTest(
     const env = createMockEnv(config);
     const context = { env, date: "2026-01-15" };
 
-    const result = await checkTesterQuota("valid-code", context);
+    const result = await checkTesterQuota("VALID-CODE", context);
 
     assertEqual(result.allowed, true, "Should allow when gate grants access");
     assertEqual(result.reason, "ok", "Reason should be ok");
@@ -249,7 +249,7 @@ await runTest(
       useGate: true,
       globalDailyCap: 1000,
       testers: {
-        "owner-code": {
+        "OWNER-CODE": {
           limit: 0,
           days: 0,
         },
@@ -260,7 +260,7 @@ await runTest(
     const env = createMockEnv(config);
     const context = { env, date: "2026-01-15" };
 
-    const result = await checkTesterQuota("owner-code", context);
+    const result = await checkTesterQuota("OWNER-CODE", context);
 
     assertEqual(result.allowed, true, "Owner should have unlimited access");
     assertEqual(result.reason, "ok", "Reason should be ok");
@@ -318,7 +318,7 @@ await runTest(
     const env = createMockEnv(config);
 
     // Should call gate to validate referrer, then register
-    await registerReferral("guest-xyz789", "valid-referrer", env);
+    await registerReferral("guest-xyz789", "VALID-REFERRER", env);
 
     // No return value to check, but should not throw
     console.log("  ✓ Referral registration with gate check completed");
@@ -351,14 +351,49 @@ await runTest("Test 9: Cache test - second call should use cache", async () => {
   const context = { env, date: "2026-01-15" };
 
   // First call - hits gate
-  const result1 = await checkTesterQuota("cached-code", context);
+  const result1 = await checkTesterQuota("CACHED-CODE", context);
   assertEqual(result1.allowed, true, "First call should be allowed");
 
   // Second call - uses cache (no fetch should happen)
   // Note: In production, cache lasts 60 seconds. For testing, we just verify no crash.
-  const result2 = await checkTesterQuota("cached-code", context);
+  const result2 = await checkTesterQuota("CACHED-CODE", context);
   assertEqual(result2.allowed, true, "Second call should use cache");
 });
+
+await runTest(
+  "Test 10: Lowercase codes are normalized to uppercase",
+  async () => {
+    const config = {
+      enabled: true,
+      useGate: true,
+      globalDailyCap: 1000,
+      testers: {},
+      testerDefaults: { limit: 100, days: 30 },
+    };
+
+    // Mock gate response for uppercase version
+    mockFetchResponses.push({
+      ok: true,
+      body: {
+        ok: true,
+        allowed: true,
+        reason: "granted",
+        mode: "token",
+        user: null,
+      },
+    });
+
+    const env = createMockEnv(config);
+    const context = { env, date: "2026-01-15" };
+
+    // Pass lowercase code - should be normalized to uppercase
+    const result = await checkTesterQuota("test-code-123", context);
+
+    assertEqual(result.allowed, true, "Lowercase code should be normalized");
+    assertEqual(result.reason, "ok", "Reason should be ok");
+    assertEqual(result.testerType, "tester", "Should be tester type");
+  },
+);
 
 // ============================================================
 // SUMMARY
