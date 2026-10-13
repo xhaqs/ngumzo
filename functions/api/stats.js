@@ -58,6 +58,7 @@ async function verifyAdminAccess(req) {
         method: "GET",
         headers: {
           "x-keystone-token": token,
+          Origin: "https://keystone.riakoine.com",
         },
       });
 
